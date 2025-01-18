@@ -65,7 +65,24 @@ export const useWebRTC = () => {
       // Handle incoming audio
       pc.ontrack = (event) => {
         if (event.track.kind === 'audio') {
+          // Mute microphone while bird is speaking
+          if (mediaStream.current) {
+            const audioTrack = mediaStream.current.getAudioTracks()[0];
+            audioTrack.enabled = false;
+            setIsListening(false);
+          }
+
           audio.srcObject = new MediaStream([event.track]);
+          
+          // Re-enable microphone when bird stops speaking
+          event.track.onended = () => {
+            if (mediaStream.current) {
+              const audioTrack = mediaStream.current.getAudioTracks()[0];
+              audioTrack.enabled = true;
+              setIsListening(true);
+            }
+          };
+
           audio.play().catch(console.error);
         }
       };
