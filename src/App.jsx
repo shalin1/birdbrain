@@ -1,35 +1,44 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useWebRTC } from './hooks/useWebRTC';
 
-function App() {
-  const [count, setCount] = useState(0)
+const VoiceChat = () => {
+  const { status, isListening, connect, toggleListening } = useWebRTC();
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <div className="w-full max-w-md mx-auto p-6">
+      <div className="bg-white rounded-lg shadow-xl p-6 space-y-4">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">
+            Professor Bird Brain's Lab
+          </h2>
+          <p className="text-gray-600 mb-4">
+            {status === 'connected' ? 'Ready to squawk!' : status}
+          </p>
+        </div>
 
-export default App
+        {status === 'disconnected' && (
+          <button
+            onClick={connect}
+            className="w-full bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            Connect to Bird Brain
+          </button>
+        )}
+
+        {status === 'connected' && (
+          <button
+            onClick={toggleListening}
+            className={`w-full px-4 py-3 rounded-lg transition-colors ${
+              isListening 
+                ? 'bg-red-500 hover:bg-red-600' 
+                : 'bg-green-500 hover:bg-green-600'
+            } text-white`}
+          >
+            {isListening ? 'Stop Squawking' : 'Start Squawking'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default VoiceChat;
