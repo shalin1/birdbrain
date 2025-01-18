@@ -1,37 +1,51 @@
 // netlify/functions/session.js
-import fetch from 'node-fetch';
+const https = require('https');
 
-export const handler = async (event, context) => {
+exports.handler = async function(event, context) {
     try {
-        console.log('Requesting OpenAI session...');
-        const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+        const response = await new Promise((resolve, reject) => {
+            const options = {
+                hostname: 'api.openai.com',
+                path: '/v1/realtime/sessions',
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                }
+            };
+
+            const req = https.request(options, (res) => {
+                let data = '';
+                
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+                
+                res.on('end', () => {
+                    resolve({
+                        statusCode: res.statusCode,
+                        body: data,
+                        headers: res.headers
+                    });
+                });
+            });
+
+            req.on('error', (error) => {
+                reject(error);
+            });
+
+            req.write(JSON.stringify({
                 model: 'gpt-4o-realtime-preview-2024-12-17',
                 voice: 'shimmer',
-            }),
+            }));
+            
+            req.end();
         });
 
-        const responseText = await response.text();
-        console.log('OpenAI response:', responseText);
-
-        if (!response.ok) {
-            throw new Error(`OpenAI API error: ${response.status} ${responseText}`);
+        if (response.statusCode !== 200) {
+            throw new Error(`OpenAI API error: ${response.statusCode} ${response.body}`);
         }
 
-        // Parse the response text as JSON
-        const data = JSON.parse(responseText);
-        
-        // Validate the response has the expected structure
-        if (!data.client_secret?.value) {
-            throw new Error('Invalid response from OpenAI - missing client_secret');
-        }
-
-        console.log('Sending session data to client');
         return {
             statusCode: 200,
             headers: {
@@ -40,7 +54,7 @@ export const handler = async (event, context) => {
                 'Access-Control-Allow-Headers': 'Content-Type',
                 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
             },
-            body: JSON.stringify(data)
+            body: response.body
         };
     } catch (error) {
         console.error('Session error:', error);
