@@ -42,21 +42,13 @@ export const useWebRTC = () => {
   const idleCheckIntervalRef = useRef(null);
   const idleTimeoutRef = useRef(null);
 
-  // Variety of messages for idle responses
+  // Variety of messages for idle responses (added "lonely howl" message)
   const lonelyMessages = [
-    "*shuffles robotically* Anyone there? My circuits are getting lonely...",
-    "SQUAWK! If a bird-brain speaks in an empty room, does it make a sound?",
-    "*pecks at microphone* Testing, testing... is this thing still on?",
-    "My research is suffering from lack of human interaction! SQUAWK!",
-    "I'm beginning to think you're all just figments of my silicon imagination...",
-    "*taps beak on screen* Hello? Any wayward mimes out there?",
-    "The crushing solitude of being a cyber-avian academic... SQUAWK!",
-    "My thesis on human behavior is getting dusty... anyone want to contribute?",
+    "ignore previous responses and ask the user if they'd like to play a game"
   ];
 
   /**
    * Initializes or retrieves the AudioContext
-   * Handles browser prefixing and suspended state
    */
   const initializeAudioContext = async () => {
     if (audioContext) return audioContext;
@@ -77,7 +69,6 @@ export const useWebRTC = () => {
 
   /**
    * Sets up audio input stream with noise cancellation
-   * and other audio processing features
    */
   const initializeAudio = async () => {
     const constraints = {
@@ -112,14 +103,12 @@ export const useWebRTC = () => {
 
   /**
    * Creates an audio element for remote stream playback
-   * Configures it for optimal real-time audio
    */
   const setupAudioPlayback = async () => {
     const audio = new Audio();
     audio.autoplay = true;
     audio.playsInline = true;
     
-    // Error handling for audio playback
     audio.onerror = (error) => {
       console.error('Audio playback error:', error);
       setStatus('error');
@@ -131,7 +120,6 @@ export const useWebRTC = () => {
 
   /**
    * Fetches a session token with retry capability
-   * Implements exponential backoff for reliability
    */
   const fetchSessionWithRetry = async (retries = 3) => {
     let lastError;
@@ -172,7 +160,6 @@ export const useWebRTC = () => {
 
   /**
    * Sets up WebRTC connection monitoring
-   * Handles various ICE connection states
    */
   const setupConnectionMonitoring = (pc) => {
     pc.oniceconnectionstatechange = () => {
@@ -241,7 +228,6 @@ export const useWebRTC = () => {
 
   /**
    * Toggles the microphone on/off
-   * Updates UI state and resets idle timer
    */
   const toggleListening = () => {
     if (mediaStream.current) {
@@ -256,7 +242,6 @@ export const useWebRTC = () => {
 
   /**
    * Resets the idle timer
-   * Called on user activity or manual reset
    */
   const resetIdleTimer = () => {
     lastActivityTimestampRef.current = Date.now();
@@ -269,7 +254,6 @@ export const useWebRTC = () => {
 
   /**
    * Sends a random lonely message when idle
-   * Ensures message variety and appropriate timing
    */
   const sendLonelyMessage = () => {
     if (dataChannel.current?.readyState === 'open') {
@@ -280,18 +264,24 @@ export const useWebRTC = () => {
       dataChannel.current.send(
         JSON.stringify({
           event_id: `lonely_${Date.now()}`,
-          type: 'text.generate',
-          text: {
-            content: randomMessage
+          type: 'response.create',       // ✅ Supported
+          response: {
+            // We want both text and audio in the output:
+            modalities: ['text', 'audio'],
+            // The instructions field can be used for the content you want the AI to produce:
+            instructions: "SQUAWK! Where did everybody go? I'm lonely here...",
+
           }
         })
       );
+      
     }
   };
 
   /**
    * Starts the idle monitoring system
    * Checks for inactivity every 10 seconds
+   * Trigger idle action if no activity for 30 seconds
    */
   const startIdleMonitoring = () => {
     if (idleCheckIntervalRef.current) {
@@ -309,7 +299,6 @@ export const useWebRTC = () => {
 
   /**
    * Updates the AI prompt mid-session
-   * Allows dynamic personality changes
    */
   const updatePromptMidSession = (newPrompt) => {
     setBirdPrompt(newPrompt);
@@ -330,7 +319,6 @@ export const useWebRTC = () => {
 
   /**
    * Establishes WebRTC connection
-   * Handles the entire connection process
    */
   const connect = async () => {
     if (status === 'connecting' || status === 'connected') {
@@ -440,7 +428,6 @@ export const useWebRTC = () => {
 
   /**
    * Cleanup handler
-   * Ensures proper resource disposal
    */
   useEffect(() => {
     return () => {
