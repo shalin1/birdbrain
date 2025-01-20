@@ -369,8 +369,10 @@ export const useWebRTC = () => {
     if (dataChannel.current && dataChannel.current.readyState === 'open') {
       dataChannel.current.send(
         JSON.stringify({
-          type: 'response.update',
-          response: {
+          event_id: `event_${Date.now()}`,      // or any unique ID
+
+          type: 'session.update',
+          session: {
             instructions: newPrompt,
           },
         })
@@ -417,5 +419,7 @@ export const useWebRTC = () => {
     toggleListening,
     stream,
     audioContext,
+    updatePromptMidSession,
+    birdPrompt
   };
 };
