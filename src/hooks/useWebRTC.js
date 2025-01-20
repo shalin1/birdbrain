@@ -17,7 +17,7 @@ export const useWebRTC = () => {
 
   // We'll store one shared AudioContext for both local & remote processing
   const [audioContext, setAudioContext] = useState(null);
-
+  const [birdPrompt, setBirdPrompt] = useState(CONFIG.BIRD_BRAIN_PROMPT);
   // "ducking": gain node for remote audio, if we want to auto-lower volume
   const remoteGainNodeRef = useRef(null);
 
@@ -187,7 +187,7 @@ export const useWebRTC = () => {
             type: 'response.create',
             response: {
               modalities: ['text', 'audio'],
-              instructions: CONFIG.BIRD_BRAIN_PROMPT,
+              instructions: birdPrompt,
             },
           })
         );
@@ -354,6 +354,33 @@ export const useWebRTC = () => {
       }
     }
   };
+
+  /**
+   * Allows us to send a new "update" message to the server **without** reconnecting.
+   * This can be used to change the system instructions or conversation context.
+   */
+  const updatePromptMidSession = (newPrompt) => {
+    // Update local state
+    setBirdPrompt(newPrompt);
+
+    // Send new instructions over the data channel
+    // The server must recognize "response.update" (or your chosen type)
+    // and apply it as the new system instructions.
+    if (dataChannel.current && dataChannel.current.readyState === 'open') {
+      dataChannel.current.send(
+        JSON.stringify({
+          type: 'response.update',
+          response: {
+            instructions: newPrompt,
+          },
+        })
+      );
+      console.log('Sent updated prompt mid-session');
+    } else {
+      console.warn('Data channel not open; cannot update prompt mid-session');
+    }
+  };
+
 
   /**
    * Cleanup
