@@ -2,43 +2,65 @@ import { useState, useEffect, useRef } from 'react';
 import { CONFIG } from '../config';
 
 /**
- * useWebRTC
- *
- * Manages:
- *  - WebRTC peer connection
- *  - Local/remote audio streams
- *  - Browser-provided echo cancellation & noise suppression
- *  - (Optional) "ducking" logic to reduce remote volume when local mic is loud
+ * useWebRTC Hook
+ * 
+ * A comprehensive hook for managing WebRTC connections in a voice chat application.
+ * Handles audio streaming, connection management, and session maintenance.
+ * 
+ * Features:
+ * - WebRTC peer connection management
+ * - Audio stream handling with echo cancellation
+ * - Automatic reconnection
+ * - Idle detection and automated responses
+ * - Mid-session prompt updates
+ * - Volume monitoring and audio processing
  */
 export const useWebRTC = () => {
+  // Connection and audio state
   const [status, setStatus] = useState('disconnected');
   const [isListening, setIsListening] = useState(false);
   const [stream, setStream] = useState(null);
-
-  // We'll store one shared AudioContext for both local & remote processing
   const [audioContext, setAudioContext] = useState(null);
   const [birdPrompt, setBirdPrompt] = useState(CONFIG.BIRD_BRAIN_PROMPT);
-  // "ducking": gain node for remote audio, if we want to auto-lower volume
-  const remoteGainNodeRef = useRef(null);
 
+  // Core WebRTC refs - persist across renders but don't trigger updates
   const peerConnection = useRef(null);
   const dataChannel = useRef(null);
   const mediaStream = useRef(null);
   const audioElement = useRef(null);
-
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 3;
 
-  // We’ll store an analyser node and a small script to measure local mic volume
+  // Audio processing references
+  const remoteGainNodeRef = useRef(null);
   const localAnalyserRef = useRef(null);
   const localSourceRef = useRef(null);
   const animationFrameRef = useRef(null);
 
+  // Idle detection references
+  const lastActivityTimestampRef = useRef(Date.now());
+  const idleCheckIntervalRef = useRef(null);
+  const idleTimeoutRef = useRef(null);
+
+  // Variety of messages for idle responses
+  const lonelyMessages = [
+    "*shuffles robotically* Anyone there? My circuits are getting lonely...",
+    "SQUAWK! If a bird-brain speaks in an empty room, does it make a sound?",
+    "*pecks at microphone* Testing, testing... is this thing still on?",
+    "My research is suffering from lack of human interaction! SQUAWK!",
+    "I'm beginning to think you're all just figments of my silicon imagination...",
+    "*taps beak on screen* Hello? Any wayward mimes out there?",
+    "The crushing solitude of being a cyber-avian academic... SQUAWK!",
+    "My thesis on human behavior is getting dusty... anyone want to contribute?",
+  ];
+
   /**
-   * Initialize or reuse a single AudioContext.
+   * Initializes or retrieves the AudioContext
+   * Handles browser prefixing and suspended state
    */
   const initializeAudioContext = async () => {
     if (audioContext) return audioContext;
+    
     try {
       const newCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (newCtx.state === 'suspended') {
@@ -47,20 +69,20 @@ export const useWebRTC = () => {
       setAudioContext(newCtx);
       return newCtx;
     } catch (error) {
-      console.error('AudioContext init failed:', error);
+      console.error('AudioContext initialization failed:', error);
       setStatus('error');
       throw error;
     }
   };
 
   /**
-   * Get mic access with built-in echo cancellation, noise suppression, etc.
+   * Sets up audio input stream with noise cancellation
+   * and other audio processing features
    */
   const initializeAudio = async () => {
     const constraints = {
       audio: {
         ...CONFIG.WEBRTC.AUDIO_CONSTRAINTS,
-        // Turn on built-in browser DSP
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
@@ -72,8 +94,8 @@ export const useWebRTC = () => {
     try {
       await initializeAudioContext();
       const localStream = await navigator.mediaDevices.getUserMedia(constraints);
-
       const audioTrack = localStream.getAudioTracks()[0];
+      
       if (!audioTrack || !audioTrack.enabled) {
         throw new Error('No valid audio track available');
       }
@@ -89,232 +111,73 @@ export const useWebRTC = () => {
   };
 
   /**
-   * Create or reuse a hidden audio element for remote playback, and optionally,
-   * route that audio through a GainNode for "ducking" or volume adjustments.
+   * Creates an audio element for remote stream playback
+   * Configures it for optimal real-time audio
    */
   const setupAudioPlayback = async () => {
     const audio = new Audio();
     audio.autoplay = true;
     audio.playsInline = true;
-    audio.onerror = (e) => {
-      console.error('Remote audio playback error:', e);
+    
+    // Error handling for audio playback
+    audio.onerror = (error) => {
+      console.error('Audio playback error:', error);
       setStatus('error');
     };
-
-    await initializeAudioContext();
 
     audioElement.current = audio;
     return audio;
   };
 
   /**
-   * Connect to server via WebRTC.
-   */
-  const connect = async () => {
-    if (status === 'connecting' || status === 'connected') {
-      console.log('Already connecting or connected, skipping connect()');
-      return;
-    }
-    try {
-      setStatus('connecting');
-
-      const ctx = await initializeAudioContext();
-      const localStream = await initializeAudio();
-      const audioEl = await setupAudioPlayback();
-      const sessionData = await fetchSessionWithRetry();
-
-      // Create PeerConnection
-      const pc = new RTCPeerConnection({
-        iceServers: CONFIG.WEBRTC.ICE_SERVERS,
-      });
-      peerConnection.current = pc;
-
-      // Monitor ICE states
-      setupConnectionMonitoring(pc);
-
-      // Add local tracks
-      const audioTrack = localStream.getAudioTracks()[0];
-      pc.addTrack(audioTrack, localStream);
-
-      // Optionally set up remote GainNode for ducking
-      if (!remoteGainNodeRef.current) {
-        remoteGainNodeRef.current = ctx.createGain();
-        remoteGainNodeRef.current.gain.value = 1.0; // default to full volume
-        remoteGainNodeRef.current.connect(ctx.destination);
-      }
-
-      // Handle remote track
-      pc.ontrack = async (event) => {
-        if (event.track.kind === 'audio') {
-          // Create a remote stream for the track
-          const remoteStream = new MediaStream([event.track]);
-
-          // Route the remote stream to our audio element
-          audioEl.srcObject = remoteStream;
-
-          // Also route the remote stream to the remoteGainNode if you prefer
-          // This is optional but allows us to do advanced gain manipulation in Web Audio
-          const remoteSource = ctx.createMediaStreamSource(remoteStream);
-          remoteSource.connect(remoteGainNodeRef.current); // now the browser won't auto-play this, we might rely on the <audio> or the node
-
-          // Attempt playback
-          try {
-            await audioEl.play();
-          } catch (playErr) {
-            console.error('Remote audio playback failed:', playErr);
-            // Attempt to resume context & play again
-            await ctx.resume().catch((resumeErr) => {
-              console.error('Could not resume audio context:', resumeErr);
-            });
-            await audioEl.play().catch((finalErr) => {
-              console.error('Still could not play audio:', finalErr);
-            });
-          }
-        }
-      };
-
-      // Data channel
-      const dc = pc.createDataChannel('oai-events');
-      dataChannel.current = dc;
-      dc.onopen = () => {
-        console.log('Data channel open');
-        setStatus('connected');
-        setIsListening(true);
-
-        // Example initial message
-        dc.send(
-          JSON.stringify({
-            type: 'response.create',
-            response: {
-              modalities: ['text', 'audio'],
-              instructions: birdPrompt,
-            },
-          })
-        );
-
-        // Start local mic volume monitoring for optional "ducking"
-        setupLocalVolumeMonitoring();
-      };
-      dc.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received WebRTC message:', data);
-          // handle data...
-        } catch (err) {
-          console.error('Error parsing data channel message:', err);
-        }
-      };
-
-      // Create + Send Offer
-      const offer = await pc.createOffer({ offerToReceiveAudio: true });
-      await pc.setLocalDescription(offer);
-
-      // Exchange SDP with server
-      const sdpResponse = await fetch(CONFIG.API.REALTIME_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionData.client_secret.value}`,
-          'Content-Type': 'application/sdp',
-        },
-        body: offer.sdp,
-      });
-
-      if (!sdpResponse.ok) {
-        throw new Error(`SDP exchange failed: ${sdpResponse.status}`);
-      }
-      const answerSdp = await sdpResponse.text();
-      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
-    } catch (error) {
-      console.error('Connection failed:', error);
-      setStatus('error');
-
-      // Retry logic
-      if (reconnectAttempts.current < maxReconnectAttempts) {
-        reconnectAttempts.current++;
-        console.log(
-          `Attempting reconnection (${reconnectAttempts.current}/${maxReconnectAttempts})`
-        );
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        return connect();
-      }
-      // else give up
-    }
-  };
-
-  /**
-   * Microphone volume monitoring to implement "ducking":
-   * If local volume is high, lower remote gain a bit to reduce feedback.
-   * You can customize thresholds, timing, etc.
-   */
-  const setupLocalVolumeMonitoring = () => {
-    if (!audioContext || !mediaStream.current) return;
-
-    // Create an analyser node to measure local mic volume
-    if (!localAnalyserRef.current) {
-      localAnalyserRef.current = audioContext.createAnalyser();
-      localAnalyserRef.current.fftSize = 256;
-      localAnalyserRef.current.smoothingTimeConstant = 0.5;
-    }
-
-    // Create or reuse a source node for the local mic
-    if (!localSourceRef.current) {
-      localSourceRef.current = audioContext.createMediaStreamSource(mediaStream.current);
-      localSourceRef.current.connect(localAnalyserRef.current);
-    }
-
-    const dataArray = new Uint8Array(localAnalyserRef.current.frequencyBinCount);
-
-    const update = () => {
-      if (!localAnalyserRef.current) return;
-
-      localAnalyserRef.current.getByteFrequencyData(dataArray);
-      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      // Normalized range is roughly 0-255 for getByteFrequencyData
-      // We'll pick an arbitrary threshold. Tweak as needed.
-      const threshold = 50;
-
-      // If local voice is quite loud, reduce remote gain to 0.5; otherwise 1.0
-      if (remoteGainNodeRef.current) {
-        if (avg > threshold) {
-          remoteGainNodeRef.current.gain.value = 0.5;
-        } else {
-          remoteGainNodeRef.current.gain.value = 1.0;
-        }
-      }
-
-      animationFrameRef.current = requestAnimationFrame(update);
-    };
-
-    update();
-  };
-
-  /**
-   * Helper function for session token fetching with retries.
+   * Fetches a session token with retry capability
+   * Implements exponential backoff for reliability
    */
   const fetchSessionWithRetry = async (retries = 3) => {
-    for (let i = 0; i < retries; i++) {
+    let lastError;
+    
+    for (let attempt = 0; attempt < retries; attempt++) {
       try {
-        const response = await fetch(`${CONFIG.API.BASE_URL}${CONFIG.API.SESSION_ENDPOINT}`);
-        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        const response = await fetch(
+          `${CONFIG.API.BASE_URL}${CONFIG.API.SESSION_ENDPOINT}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
 
         if (!data.client_secret?.value) {
           throw new Error('Invalid session response - missing client_secret');
         }
+
         return data;
       } catch (error) {
-        if (i === retries - 1) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
+        console.warn(`Session fetch attempt ${attempt + 1} failed:`, error);
+        lastError = error;
+
+        if (attempt < retries - 1) {
+          await new Promise(resolve => 
+            setTimeout(resolve, 1000 * Math.pow(2, attempt))
+          );
+        }
       }
     }
+
+    throw new Error(
+      `Failed to fetch session after ${retries} attempts. Last error: ${lastError?.message}`
+    );
   };
 
   /**
-   * ICE state change monitoring.
+   * Sets up WebRTC connection monitoring
+   * Handles various ICE connection states
    */
   const setupConnectionMonitoring = (pc) => {
     pc.oniceconnectionstatechange = () => {
       console.log('ICE state:', pc.iceConnectionState);
+      
       switch (pc.iceConnectionState) {
         case 'checking':
           setStatus('establishing connection...');
@@ -336,14 +199,49 @@ export const useWebRTC = () => {
         case 'closed':
           setStatus('disconnected');
           break;
-        default:
-          break;
       }
     };
   };
 
   /**
-   * Toggle local mic track on/off.
+   * Monitors local audio volume for "ducking" effect
+   * Reduces remote volume when local volume is high
+   */
+  const setupLocalVolumeMonitoring = () => {
+    if (!audioContext || !mediaStream.current) return;
+
+    if (!localAnalyserRef.current) {
+      localAnalyserRef.current = audioContext.createAnalyser();
+      localAnalyserRef.current.fftSize = 256;
+      localAnalyserRef.current.smoothingTimeConstant = 0.5;
+    }
+
+    if (!localSourceRef.current) {
+      localSourceRef.current = audioContext.createMediaStreamSource(mediaStream.current);
+      localSourceRef.current.connect(localAnalyserRef.current);
+    }
+
+    const dataArray = new Uint8Array(localAnalyserRef.current.frequencyBinCount);
+
+    const update = () => {
+      if (!localAnalyserRef.current) return;
+
+      localAnalyserRef.current.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      
+      if (remoteGainNodeRef.current) {
+        remoteGainNodeRef.current.gain.value = avg > 50 ? 0.5 : 1.0;
+      }
+
+      animationFrameRef.current = requestAnimationFrame(update);
+    };
+
+    update();
+  };
+
+  /**
+   * Toggles the microphone on/off
+   * Updates UI state and resets idle timer
    */
   const toggleListening = () => {
     if (mediaStream.current) {
@@ -351,26 +249,75 @@ export const useWebRTC = () => {
       if (audioTrack) {
         audioTrack.enabled = !isListening;
         setIsListening(!isListening);
+        resetIdleTimer();
       }
     }
   };
 
   /**
-   * Allows us to send a new "update" message to the server **without** reconnecting.
-   * This can be used to change the system instructions or conversation context.
+   * Resets the idle timer
+   * Called on user activity or manual reset
    */
-  const updatePromptMidSession = (newPrompt) => {
-    // Update local state
-    setBirdPrompt(newPrompt);
+  const resetIdleTimer = () => {
+    lastActivityTimestampRef.current = Date.now();
+    
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = null;
+    }
+  };
 
-    // Send new instructions over the data channel
-    // The server must recognize "response.update" (or your chosen type)
-    // and apply it as the new system instructions.
-    if (dataChannel.current && dataChannel.current.readyState === 'open') {
+  /**
+   * Sends a random lonely message when idle
+   * Ensures message variety and appropriate timing
+   */
+  const sendLonelyMessage = () => {
+    if (dataChannel.current?.readyState === 'open') {
+      const randomMessage = lonelyMessages[
+        Math.floor(Math.random() * lonelyMessages.length)
+      ];
+      
       dataChannel.current.send(
         JSON.stringify({
-          event_id: `event_${Date.now()}`,      // or any unique ID
+          event_id: `lonely_${Date.now()}`,
+          type: 'text.generate',
+          text: {
+            content: randomMessage
+          }
+        })
+      );
+    }
+  };
 
+  /**
+   * Starts the idle monitoring system
+   * Checks for inactivity every 10 seconds
+   */
+  const startIdleMonitoring = () => {
+    if (idleCheckIntervalRef.current) {
+      clearInterval(idleCheckIntervalRef.current);
+    }
+
+    idleCheckIntervalRef.current = setInterval(() => {
+      const idleTime = Date.now() - lastActivityTimestampRef.current;
+      if (idleTime >= 60000) {
+        sendLonelyMessage();
+        lastActivityTimestampRef.current = Date.now();
+      }
+    }, 10000);
+  };
+
+  /**
+   * Updates the AI prompt mid-session
+   * Allows dynamic personality changes
+   */
+  const updatePromptMidSession = (newPrompt) => {
+    setBirdPrompt(newPrompt);
+    
+    if (dataChannel.current?.readyState === 'open') {
+      dataChannel.current.send(
+        JSON.stringify({
+          event_id: `event_${Date.now()}`,
           type: 'session.update',
           session: {
             instructions: newPrompt,
@@ -378,24 +325,140 @@ export const useWebRTC = () => {
         })
       );
       console.log('Sent updated prompt mid-session');
-    } else {
-      console.warn('Data channel not open; cannot update prompt mid-session');
     }
   };
 
+  /**
+   * Establishes WebRTC connection
+   * Handles the entire connection process
+   */
+  const connect = async () => {
+    if (status === 'connecting' || status === 'connected') {
+      console.log('Already connecting or connected');
+      return;
+    }
+
+    try {
+      setStatus('connecting');
+      
+      const ctx = await initializeAudioContext();
+      const localStream = await initializeAudio();
+      const audioEl = await setupAudioPlayback();
+      const sessionData = await fetchSessionWithRetry();
+
+      const pc = new RTCPeerConnection({
+        iceServers: CONFIG.WEBRTC.ICE_SERVERS,
+      });
+      peerConnection.current = pc;
+
+      setupConnectionMonitoring(pc);
+      
+      const audioTrack = localStream.getAudioTracks()[0];
+      pc.addTrack(audioTrack, localStream);
+
+      const dc = pc.createDataChannel('oai-events');
+      dataChannel.current = dc;
+      
+      dc.onopen = () => {
+        console.log('Data channel open');
+        setStatus('connected');
+        setIsListening(true);
+
+        dc.send(
+          JSON.stringify({
+            type: 'response.create',
+            response: {
+              modalities: ['text', 'audio'],
+              instructions: birdPrompt,
+            },
+          })
+        );
+
+        startIdleMonitoring();
+        setupLocalVolumeMonitoring();
+      };
+
+      dc.onmessage = (event) => {
+        resetIdleTimer();
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Received WebRTC message:', data);
+        } catch (err) {
+          console.error('Error parsing data channel message:', err);
+        }
+      };
+
+      // Handle remote media
+      pc.ontrack = async (event) => {
+        if (event.track.kind === 'audio') {
+          const remoteStream = new MediaStream([event.track]);
+          audioEl.srcObject = remoteStream;
+
+          try {
+            await audioEl.play();
+          } catch (playErr) {
+            console.error('Remote audio playback failed:', playErr);
+            await ctx.resume().catch(console.error);
+            await audioEl.play().catch(console.error);
+          }
+        }
+      };
+
+      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      await pc.setLocalDescription(offer);
+
+      const sdpResponse = await fetch(CONFIG.API.REALTIME_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${sessionData.client_secret.value}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: offer.sdp,
+      });
+
+      if (!sdpResponse.ok) {
+        throw new Error(`SDP exchange failed: ${sdpResponse.status}`);
+      }
+
+      const answerSdp = await sdpResponse.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+    } catch (error) {
+      console.error('Connection failed:', error);
+      setStatus('error');
+
+      if (reconnectAttempts.current < maxReconnectAttempts) {
+        reconnectAttempts.current++;
+        console.log(
+          `Attempting reconnection (${reconnectAttempts.current}/${maxReconnectAttempts})`
+        );
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return connect();
+      }
+    }
+  };
 
   /**
-   * Cleanup
+   * Cleanup handler
+   * Ensures proper resource disposal
    */
   useEffect(() => {
     return () => {
-      // Stop any running animation frames
+      // Clear timers
+      if (idleCheckIntervalRef.current) {
+        clearInterval(idleCheckIntervalRef.current);
+      }
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+      }
+
+      // Stop animation frame
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
 
-      // Stop local tracks
-      mediaStream.current?.getTracks().forEach((t) => t.stop());
+      // Stop media streams
+      mediaStream.current?.getTracks().forEach(t => t.stop());
 
       // Close peer connection
       if (peerConnection.current) {
