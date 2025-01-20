@@ -186,6 +186,21 @@ export const useWebRTC = () => {
         }));
       };
 
+      // Add message handler for data channel
+      dc.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Received WebRTC message:', data);
+          
+          // Log specific rate limit headers or errors if present
+          if (data.error?.code === 429 || data.error?.type === 'rate_limit_error') {
+            console.warn('Rate limit hit:', data.error);
+          }
+        } catch (error) {
+          console.error('Error parsing WebRTC message:', error);
+        }
+      };
+
       // 8. Create and send offer
       const offer = await pc.createOffer({ offerToReceiveAudio: true });
       await pc.setLocalDescription(offer);
