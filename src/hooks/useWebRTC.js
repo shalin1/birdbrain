@@ -5,6 +5,7 @@ import { CONFIG } from '../config';
 export const useWebRTC = () => {
   const [status, setStatus] = useState('disconnected');
   const [isListening, setIsListening] = useState(false);
+  const [stream, setStream] = useState(null);
   
   const peerConnection = useRef(null);
   const dataChannel = useRef(null);
@@ -17,6 +18,7 @@ export const useWebRTC = () => {
         audio: CONFIG.WEBRTC.AUDIO_CONSTRAINTS
       });
       mediaStream.current = stream;
+      setStream(stream);  // Make stream available to components
       return stream;
     } catch (error) {
       console.error('Microphone access failed:', error);
@@ -47,7 +49,6 @@ export const useWebRTC = () => {
         throw new Error(`Failed to get session token: ${sessionResponse.status} ${errorText}`);
       }
       const data = await sessionResponse.json();
-      console.log('Session response:', data);
       
       if (!data.client_secret?.value) {
         throw new Error('Invalid session response - missing client_secret');
@@ -93,6 +94,7 @@ export const useWebRTC = () => {
       
       dc.onopen = () => {
         setStatus('connected');
+        setIsListening(true);  // Enable listening by default when connected
         dc.send(JSON.stringify({
           type: 'response.create',
           response: {
@@ -144,6 +146,7 @@ export const useWebRTC = () => {
     status,
     isListening,
     connect,
-    toggleListening
+    toggleListening,
+    stream  
   };
 };
