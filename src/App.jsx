@@ -1,88 +1,86 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useWebRTC } from './hooks/useWebRTC';
 import { Mic, MicOff } from 'lucide-react';
+import { useWebRTC } from './hooks/useWebRTC';
 
-const AudioMeter = ({ stream, isListening }) => {
+/**
+ * AudioMeter
+ * 
+ * Displays volume bars based on the provided audio `stream`.
+ * Relies on the external AudioContext passed from props.
+ */
+const AudioMeter = ({ stream, isListening, audioContext }) => {
   const [volume, setVolume] = useState(0);
-  const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
-  const animationFrameRef = useRef(null);
   const sourceRef = useRef(null);
-  
-  // Initialize audio context and analyzer
+  const animationFrameRef = useRef(null);
+
   useEffect(() => {
-    console.log('AudioMeter: Stream changed', { stream, isListening });
-    
-    if (!stream || !isListening) {
-      console.log('AudioMeter: No stream or not listening');
+    // Cleanup function to stop volume analysis
+    const cleanup = () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
+      }
+      analyserRef.current = null;
+    };
+
+    // If we don't have a valid stream or we're not "listening," zero out
+    if (!stream || !isListening || !audioContext) {
       setVolume(0);
+      cleanup();
       return;
     }
 
     try {
-      // Create AudioContext if it doesn't exist
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        console.log('AudioMeter: Created new AudioContext');
-      }
-
-      // Create Analyzer if it doesn't exist
+      // Create analyser if not already available
       if (!analyserRef.current) {
-        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current = audioContext.createAnalyser();
         analyserRef.current.fftSize = 1024;
         analyserRef.current.smoothingTimeConstant = 0.8;
-        console.log('AudioMeter: Created new Analyser');
       }
 
-      // Connect the stream
+      // Create a MediaStreamSource if none exists yet
       if (!sourceRef.current) {
-        sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+        sourceRef.current = audioContext.createMediaStreamSource(stream);
         sourceRef.current.connect(analyserRef.current);
-        console.log('AudioMeter: Connected stream to analyser');
       }
 
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
 
       const updateVolume = () => {
         if (!analyserRef.current) return;
-        
         analyserRef.current.getByteFrequencyData(dataArray);
-        
-        // Focus on the frequency range most relevant to speech
+
+        // Focus on the lower ~40% frequency range (roughly speech)
         const speechRange = dataArray.slice(0, Math.floor(dataArray.length * 0.4));
-        const values = speechRange.reduce((acc, val) => acc + val, 0);
-        const averageVolume = values / speechRange.length;
-        
-        // Apply non-linear scaling for better dynamics
+        const sum = speechRange.reduce((acc, val) => acc + val, 0);
+        const averageVolume = sum / speechRange.length;
+
+        // Normalize and apply mild power curve
         const normalizedVolume = Math.pow(averageVolume / 128, 1.2);
-        
-        // Smooth the transitions
-        setVolume(prev => prev * 0.6 + normalizedVolume * 0.4);
+
+        // Smooth transitions
+        setVolume((prev) => prev * 0.6 + normalizedVolume * 0.4);
+
         animationFrameRef.current = requestAnimationFrame(updateVolume);
       };
 
-      console.log('AudioMeter: Starting volume updates');
       updateVolume();
 
-      return () => {
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-        if (sourceRef.current) {
-          sourceRef.current.disconnect();
-          sourceRef.current = null;
-        }
-        console.log('AudioMeter: Cleaned up');
-      };
+      // Cleanup on effect re-run or component unmount
+      return cleanup;
     } catch (error) {
-      console.error('AudioMeter: Error setting up audio analysis:', error);
+      console.error('AudioMeter: Error setting up audio analysis', error);
+      cleanup();
     }
-  }, [stream, isListening]);
+  }, [stream, isListening, audioContext]);
 
-  const bars = Array(16).fill(0);
-  
   return (
     <div className="flex items-center space-x-2 bg-gray-100 p-3 rounded-lg">
+      {/* Microphone icon */}
       <div className="flex-shrink-0">
         {isListening ? (
           <Mic className="w-6 h-6 text-green-500" />
@@ -90,18 +88,18 @@ const AudioMeter = ({ stream, isListening }) => {
           <MicOff className="w-6 h-6 text-red-500" />
         )}
       </div>
-      
+
+      {/* Volume Bars */}
       <div className="relative flex h-20 items-end gap-0.5 bg-gray-200 p-1">
         {[...Array(16)].map((_, i) => {
-          // Progressive scaling for a more interesting visualization
+          // Additional scaling for each bar
           const barScale = 0.3 + ((i + 1) / 16) * 0.7;
-          // Smooth the volume with exponential scaling
+          // Another small power transform for a more dramatic look
           const smoothedVolume = Math.pow(volume, 1.5);
-          // Calculate height with minimum and progressive scaling
           const height = Math.max(2, Math.min(70, smoothedVolume * 70 * barScale));
-          
+
           return (
-            <div 
+            <div
               key={i}
               className="absolute bottom-1"
               style={{
@@ -115,7 +113,7 @@ const AudioMeter = ({ stream, isListening }) => {
           );
         })}
       </div>
-      
+
       {/* Debug display */}
       <div className="text-xs text-gray-500 ml-2">
         {volume.toFixed(2)}
@@ -124,29 +122,58 @@ const AudioMeter = ({ stream, isListening }) => {
   );
 };
 
+/**
+ * VoiceChat
+ * 
+ * Provides:
+ *  - Connection to a remote WebRTC server
+ *  - Local microphone streaming
+ *  - A volume meter (AudioMeter)
+ *  - UI for connecting/disconnecting/muting
+ */
 const VoiceChat = () => {
-  const { status, isListening, connect, toggleListening, stream } = useWebRTC();
-  
+  const {
+    status,
+    isListening,
+    connect,
+    toggleListening,
+    stream,
+    audioContext,
+  } = useWebRTC();
+
   useEffect(() => {
-    console.log('VoiceChat: Status or listening changed', { 
-      status, 
+    console.log('VoiceChat: status or listening changed', {
+      status,
       isListening,
-      hasStream: !!stream 
+      hasStream: !!stream,
     });
   }, [status, isListening, stream]);
+
+  // Helper to display user-friendly status text
+  const renderStatusText = () => {
+    switch (status) {
+      case 'connecting':
+        return 'Connecting to Bird Brain...';
+      case 'connected':
+        return 'Ready to squawk!';
+      case 'disconnected':
+        return 'Disconnected';
+      case 'error':
+        return 'An error occurred. Please try again.';
+      default:
+        return status;
+    }
+  };
 
   return (
     <div className="w-full max-w-md mx-auto p-6">
       <div className="bg-white rounded-lg shadow-xl p-6 space-y-4">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">
-            Professor Bird Brain's Lab
-          </h2>
-          <p className="text-gray-600 mb-4">
-            {status === 'connected' ? 'Ready to squawk!' : status}
-          </p>
+          <h2 className="text-xl font-semibold mb-2">Professor Bird Brain's Lab</h2>
+          <p className="text-gray-600 mb-4">{renderStatusText()}</p>
         </div>
 
+        {/* Connect button if not connected */}
         {status === 'disconnected' && (
           <button
             onClick={connect}
@@ -156,14 +183,19 @@ const VoiceChat = () => {
           </button>
         )}
 
+        {/* Show meter + mute/unmute if connected */}
         {status === 'connected' && (
           <div className="space-y-4">
-            <AudioMeter stream={stream} isListening={isListening} />
+            <AudioMeter
+              stream={stream}
+              isListening={isListening}
+              audioContext={audioContext}
+            />
             <button
               onClick={toggleListening}
               className={`w-full px-4 py-3 rounded-lg transition-colors ${
-                isListening 
-                  ? 'bg-red-500 hover:bg-red-600' 
+                isListening
+                  ? 'bg-red-500 hover:bg-red-600'
                   : 'bg-green-500 hover:bg-green-600'
               } text-white`}
             >
