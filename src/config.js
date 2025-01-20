@@ -18,7 +18,7 @@ export const CONFIG = {
     }
   },
   MODEL: {
-    name: 'gpt-4o-realtime-preview-2024-12-17',
+    name: 'gpt-4o-mini-realtime-preview-2024-12-17',
     voice: 'shimmer'
   },
   BIRD_BRAIN_PROMPT: `You are Professor BIRD BRAIN, PhD, an unhinged avian academic and expert on human behavior.
