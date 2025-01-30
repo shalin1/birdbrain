@@ -15,6 +15,46 @@ import { CONFIG } from '../config';
  * - Mid-session prompt updates
  * - Volume monitoring and audio processing
  */
+/**
+ * Custom React hook for managing WebRTC voice chat functionality
+ * @typedef {Object} WebRTCHookReturn
+ * @property {string} status - Current connection status ('disconnected', 'connecting', 'connected')
+ * @property {boolean} isListening - Whether the local microphone is active
+ * @property {MediaStream} stream - The local audio MediaStream
+ * @property {AudioContext} audioContext - The Web Audio API context
+ * @property {string} birdPrompt - Current AI personality prompt
+ * @property {function} connect - Initiates WebRTC connection
+ * @property {function} disconnect - Closes WebRTC connection
+ * @property {function} toggleListening - Toggles microphone on/off
+ * @property {function} updatePromptMidSession - Updates AI prompt during active session
+ * @property {function} resetIdleTimer - Resets the inactivity timer
+ * 
+ * @returns {WebRTCHookReturn} Hook return object containing state and methods
+ * 
+ * @example
+ * const {
+ *   status,
+ *   isListening,
+ *   connect,
+ *   disconnect,
+ *   toggleListening,
+ *   updatePromptMidSession
+ * } = useWebRTC();
+ * 
+ * // Start connection
+ * useEffect(() => {
+ *   connect();
+ *   return () => disconnect();
+ * }, []);
+ * 
+ * // Toggle microphone
+ * const handleMicToggle = () => toggleListening();
+ * 
+ * // Update prompt
+ * const changePersonality = (newPrompt) => updatePromptMidSession(newPrompt);
+ */
+
+
 export const useWebRTC = () => {
   // Connection and audio state
   const [status, setStatus] = useState('disconnected');
