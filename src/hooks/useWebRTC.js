@@ -381,6 +381,7 @@ export const useWebRTC = () => {
           type: 'session.update',
           session: {
             instructions: newPrompt,
+            temperature: 0.6,
           },
         })
       );
@@ -430,6 +431,7 @@ export const useWebRTC = () => {
             response: {
               modalities: ['text', 'audio'],
               instructions: birdPrompt,
+              temperature: 0.6
             },
           })
         );
@@ -449,6 +451,7 @@ export const useWebRTC = () => {
                 type: 'session.update',
                 session: {
                   instructions: birdPrompt,
+                  temperature: 0.6,
                 }
               })
             );
