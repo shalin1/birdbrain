@@ -273,21 +273,40 @@ export const useWebRTC = () => {
    */
   const sendLonelyMessage = () => {
     if (dataChannel.current?.readyState === 'open') {
+      // First, update session configuration
       const randomMessage = lonelyMessages[
         Math.floor(Math.random() * lonelyMessages.length)
       ];
-      
+
       dataChannel.current.send(
         JSON.stringify({
-          event_id: `lonely_${Date.now()}`,
-          type: 'text.generate',
-          text: {
-            content: randomMessage
+          event_id: `config_${Date.now()}`,
+          type: 'session.update',
+          session: {
+            instructions: 'You must respond exactly with "are you still there i am very lonely" without variation.',
+            modalities: ['audio','text'],
+            temperature: 0.6,
           }
         })
       );
+
+      // Then, after a brief delay to ensure config is applied, send the response request
+      setTimeout(() => {
+        dataChannel.current.send(
+          JSON.stringify({
+            event_id: `lonely_${Date.now()}`,
+            type: 'response.create',
+            response: {
+              modalities: ['audio','text']
+            }
+          })
+        );
+      }, 1000);
     }
   };
+
+
+  
 
   /**
    * Starts the idle monitoring system
@@ -300,11 +319,12 @@ export const useWebRTC = () => {
 
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
-      if (idleTime >= 60000) {
+      console.log('Idle time:', idleTime);
+      if (idleTime >= 10000) {
         sendLonelyMessage();
         lastActivityTimestampRef.current = Date.now();
       }
-    }, 10000);
+    }, 5000);
   };
 
   /**
@@ -382,6 +402,17 @@ export const useWebRTC = () => {
         resetIdleTimer();
         try {
           const data = JSON.parse(event.data);
+          if(data.type==='response.done'){
+            dataChannel.current.send(
+              JSON.stringify({
+                event_id: `reset_${Date.now()}`,
+                type: 'session.update',
+                session: {
+                  instructions: birdPrompt,
+                }
+              })
+            );
+          }
           console.log('Received WebRTC message:', data);
         } catch (err) {
           console.error('Error parsing data channel message:', err);
