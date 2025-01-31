@@ -4,9 +4,9 @@ import { CONFIG } from '../config';
 export const useWebSocketAudio = () => {
     const [status, setStatus] = useState('disconnected');
     const [isListening, setIsListening] = useState(false);
-    const [audioContext, setAudioContext] = useState(null);
     const [birdPrompt, setBirdPrompt] = useState(CONFIG.BIRD_BRAIN_PROMPT);
   
+    const audioContextRef = useRef(null);
     const websocketRef = useRef(null);
     const mediaStream = useRef(null);
     const audioElement = useRef(null);
@@ -19,13 +19,13 @@ export const useWebSocketAudio = () => {
     const localSourceRef = useRef(null);
 
     const initializeAudioContext = async () => {
-        if (audioContext) return audioContext;
+        if (audioContextRef.current) return audioContextRef.current;
         try {
           const newCtx = new (window.AudioContext || window.webkitAudioContext)();
           if (newCtx.state === 'suspended') {
             await newCtx.resume();
           }
-          setAudioContext(newCtx);
+          audioContextRef.current = newCtx;
           return newCtx;
         } catch (error) {
           console.error('AudioContext initialization failed:', error);
@@ -49,7 +49,7 @@ export const useWebSocketAudio = () => {
         return audio;
       };
        
-      const initializeAudio = async () => {
+    const initializeAudio = async () => {
         const constraints = {
           audio: {
             ...CONFIG.WEBRTC.AUDIO_CONSTRAINTS,
@@ -96,7 +96,6 @@ export const useWebSocketAudio = () => {
           ws.onopen = async () => {
             console.log('WebSocket connection established');
             setStatus('connected');
-          await initializeAudioContext();
             startAudioCapture();
             setIsListening(true);
             startIdleMonitoring();
@@ -108,7 +107,6 @@ export const useWebSocketAudio = () => {
                 }
             }
             ws.send(JSON.stringify(event));
-              
           };
     
           ws.onmessage = (event) => {
@@ -147,16 +145,16 @@ export const useWebSocketAudio = () => {
       };
     
     const startAudioCapture = () => {
-        if (!audioContext) {
+        if (!audioContextRef.current) {
             console.error('AudioContext is not initialized.');
             return;
           }
         if (mediaStream.current) {
           const audioTrack = mediaStream.current.getAudioTracks()[0];
-          const audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-          localSourceRef.current = audioContext.createMediaStreamSource(mediaStream.current);
+          const audioProcessor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+          localSourceRef.current = audioContextRef.current.createMediaStreamSource(mediaStream.current);
           localSourceRef.current.connect(audioProcessor);
-          audioProcessor.connect(audioContext.destination);
+          audioProcessor.connect(audioContextRef.current.destination);
     
           audioProcessor.onaudioprocess = (event) => {
             const inputData = event.inputBuffer.getChannelData(0);
@@ -167,22 +165,83 @@ export const useWebSocketAudio = () => {
       };
 
       const handleServerMessage = (data) => {
-        if (data.type === 'audio') {
-          const audioBuffer = new Float32Array(data.audio);
-          playAudio(audioBuffer);
+        if (data.type === 'response.audio.delta') {
+          const base64String = data.delta; // base64-encoded 16-bit PCM
+          if (!base64String) return;
+      
+          // Convert to raw bytes
+          const arrayBuf = base64ToArrayBuffer(base64String);
+          // Interpret as 16-bit PCM
+          playPCM16(arrayBuf);
         } else {
           console.log('Received message:', data);
         }
       };
+
+// Just a global or module-level var to track next available playback time
+let playbackTime = 0;
+
+function playPCM16(arrayBuffer) {
+  const audioCtx = audioContextRef.current;
+  const uint8 = new Uint8Array(arrayBuffer);
+  const sampleCount = uint8.length / 2;
+
+  const serverSampleRate = 24000; // confirm your real rate
+  const audioBuffer = audioCtx.createBuffer(1, sampleCount, serverSampleRate);
+  const floatChannel = audioBuffer.getChannelData(0);
+
+  for (let i = 0; i < sampleCount; i++) {
+    let sample = (uint8[2*i + 1] << 8) | uint8[2*i];
+    if (sample >= 32768) sample -= 65536;
+    floatChannel[i] = sample / 32768;
+  }
+
+  // Calculate chunk duration in seconds
+  const chunkDuration = sampleCount / serverSampleRate;
+
+  // If we've never scheduled anything yet or if clock has caught up, start now
+  if (playbackTime < audioCtx.currentTime) {
+    playbackTime = audioCtx.currentTime;
+  }
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioCtx.destination);
+
+  // Schedule chunk to begin exactly at 'playbackTime'
+  source.start(playbackTime);
+
+  // Move the 'playbackTime' forward by the chunk length
+  playbackTime += chunkDuration;
+}
+
+            
+// 1. Convert the base64 delta string to an ArrayBuffer
+function base64ToArrayBuffer(base64) {
+    const binaryString = atob(base64);
+    const length = binaryString.length;
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+  
     
-      const playAudio = async (audioBuffer) => {
-        const buffer = audioContext.createBuffer(1, audioBuffer.length, audioContext.sampleRate);
-        buffer.copyToChannel(audioBuffer, 0);
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start();
-      };
+  const playAudio = async (arrayBuffer) => {
+    console.log(arrayBuffer,'arrayBuffer')
+    try {
+      // decodeAudioData returns a decoded AudioBuffer
+      const decodedData = await audioContextRef.current.decodeAudioData(arrayBuffer);
+      const source = audioContextRef.current.createBufferSource();
+      source.buffer = decodedData;
+      source.connect(audioContextRef.current.destination);
+      source.start();
+    } catch (err) {
+      console.error("decodeAudioData error:", err);
+    }
+  };
+  
 
       const startIdleMonitoring = () => {
         if (idleCheckIntervalRef.current) {
@@ -237,11 +296,11 @@ export const useWebSocketAudio = () => {
           websocketRef.current.close();
           websocketRef.current = null;
         }
-        if (audioContext) {
-          audioContext.close().catch((err) =>
+        if (audioContextRef.current) {
+          audioContextRef.current.close().catch((err) =>
             console.error('Error closing audio context:', err)
           );
-          setAudioContext(null);
+          audioContextRef.current = null;
         }
       
         setStatus('disconnected');
