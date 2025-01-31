@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useWebRTC } from './hooks/useWebRTC';
 import { CONFIG } from './config';
 import AudioMeter from './components/AudioMeter';
+import { useWebSocketAudio } from './hooks/useWebsockets';
 
 const VoiceChat = () => {
   const {
@@ -10,11 +11,9 @@ const VoiceChat = () => {
     isListening,
     connect,
     toggleListening,
-    stream,
-    audioContext,
     birdPrompt,
     updatePromptMidSession,
-  } = useWebRTC();
+  } = useWebSocketAudio();
 
   const [customPrompt, setCustomPrompt] = useState('');
 
@@ -45,11 +44,11 @@ const VoiceChat = () => {
         {/* Audio Meter and Mute Button if connected */}
         {status === 'connected' && (
           <div className="space-y-4">
-            <AudioMeter
+            {/* <AudioMeter
               stream={stream}
               isListening={isListening}
               audioContext={audioContext}
-            />
+            /> */}
             <button
               onClick={toggleListening}
               className={`w-full px-4 py-3 rounded-md transition-colors ${

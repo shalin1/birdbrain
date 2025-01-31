@@ -5,6 +5,7 @@ export const CONFIG = {
   API: {
     BASE_URL: isDevelopment ? 'http://localhost:3001' : '/.netlify/functions',
     REALTIME_ENDPOINT: 'https://api.openai.com/v1/realtime',
+    REALTIME_ENDPOINT_WS: "wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17",
     SESSION_ENDPOINT: '/session',
   },
   WEBRTC: {
@@ -14,7 +15,9 @@ export const CONFIG = {
     AUDIO_CONSTRAINTS: {
       echoCancellation: true,
       noiseSuppression: true,
-      autoGainControl: true
+      autoGainControl: true,
+      sampleRate: 48000,
+      channelCount: 1,
     }
   },
   MODEL: {
