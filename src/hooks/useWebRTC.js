@@ -289,7 +289,6 @@ export const useWebRTC = () => {
       if (audioTrack) {
         audioTrack.enabled = !isListening;
         setIsListening(!isListening);
-        resetIdleTimer();
       }
     }
   };
@@ -323,7 +322,7 @@ export const useWebRTC = () => {
           event_id: `config_${Date.now()}`,
           type: 'session.update',
           session: {
-            instructions: 'You must respond exactly with "are you still there i am very lonely" without variation.',
+            instructions: `You must respond exactly with ${randomMessage} without variation.`,
             modalities: ['audio','text'],
             temperature: 0.6,
           }
@@ -345,27 +344,38 @@ export const useWebRTC = () => {
     }
   };
 
-
-  
-
   /**
    * Starts the idle monitoring system
    * Checks for inactivity every 10 seconds
    */
-  const startIdleMonitoring = () => {
-    if (idleCheckIntervalRef.current) {
-      clearInterval(idleCheckIntervalRef.current);
-    }
+const startIdleMonitoring = () => {
+  if (idleCheckIntervalRef.current) {
+    clearInterval(idleCheckIntervalRef.current);
+  }
 
-    idleCheckIntervalRef.current = setInterval(() => {
-      const idleTime = Date.now() - lastActivityTimestampRef.current;
-      console.log('Idle time:', idleTime);
-      if (idleTime >= 10000) {
-        sendLonelyMessage();
-        lastActivityTimestampRef.current = Date.now();
-      }
-    }, 5000);
-  };
+  idleCheckIntervalRef.current = setInterval(() => {
+    const idleTime = Date.now() - lastActivityTimestampRef.current;
+    console.log('Idle time:', idleTime, 'ms');
+
+    if (idleTime >= 120000) {
+      console.log('2 minutes of inactivity. Closing connection...');
+      // Close current connection
+      disconnect();
+
+      // Give a small delay before reconnecting,
+      // ensuring we tear down resources cleanly.
+      setTimeout(() => {
+        console.log('Reconnecting with a fresh state...');
+        connect();
+      }, 1000);
+    }
+    // Optional: after 30 seconds of inactivity, send a "lonely message"
+    // else if (idleTime % 30000 < 10) {
+    //   sendLonelyMessage();
+    // }
+  }, 10); // Check every 5 seconds
+};
+
 
   /**
    * Updates the AI prompt mid-session
@@ -441,7 +451,6 @@ export const useWebRTC = () => {
       };
 
       dc.onmessage = (event) => {
-        resetIdleTimer();
         try {
           const data = JSON.parse(event.data);
           if(data.type==='response.done'){
@@ -549,9 +558,63 @@ export const useWebRTC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const disconnect = () => {
+    console.log('Disconnecting...');
+  
+    // Clear intervals/timeouts
+    resetIdleTimer();
+    if (idleCheckIntervalRef.current) {
+      clearInterval(idleCheckIntervalRef.current);
+      idleCheckIntervalRef.current = null;
+    }
+    if (idleTimeoutRef.current) {
+      clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = null;
+    }
+  
+    // Stop the volume monitoring animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  
+    // Stop all local media tracks
+    if (mediaStream.current) {
+      mediaStream.current.getTracks().forEach((track) => track.stop());
+      mediaStream.current = null;
+    }
+  
+    // Close peer connection
+    if (peerConnection.current) {
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
+  
+    // Data channel cleanup
+    if (dataChannel.current) {
+      dataChannel.current.close();
+      dataChannel.current = null;
+    }
+  
+    // Optionally close/reset the audio context
+    if (audioContext) {
+      audioContext.close().catch((err) =>
+        console.error('Error closing audio context:', err)
+      );
+      setAudioContext(null);
+    }
+  
+    setStream(null);
+    setStatus('disconnected');
+    setIsListening(false);
+    
+    console.log('Disconnected successfully.');
+  };
+  
   return {
     status,
     isListening,
+    disconnect,
     connect,
     toggleListening,
     stream,
