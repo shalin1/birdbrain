@@ -17,6 +17,8 @@ const VoiceChat = () => {
     toggleListening,
     birdPrompt,
     updatePromptMidSession,
+    audioContext,
+    disconnect,
   } = useWebRTC();
   const {
     wsStatus,
@@ -25,6 +27,7 @@ const VoiceChat = () => {
     wsDisconnect,
     wsBirdPrompt,
     wsUpdatePromptMidSession,
+    wsToggleListening,
   } = useWebSocketAudio();
 
   const connectToOpenAiRealtimeWebsocket = () => {
@@ -49,7 +52,7 @@ const VoiceChat = () => {
         </div>
 
         {/* Connect button if not connected */}
-        {status === 'disconnected' && (
+        {status === 'disconnected' && wsStatus === 'disconnected' && (
           <>
             <button
               onClick={connectToOpenAiRealtimeWebrtc}
@@ -67,16 +70,28 @@ const VoiceChat = () => {
         )}
 
         {/* Audio Meter and Mute Button if connected */}
-        {status === 'connected' && (
+        {(status === 'connected' || wsStatus === 'connected') && (
           <div className="space-y-4">
-            <AudioMeter
-              stream={stream}
-              isListening={isListening}
-              audioContext={audioContext}
-            />
+
             {connection === 'webrtc' && (
+              <>
+                <AudioMeter
+                  stream={stream}
+                  isListening={isListening}
+                  audioContext={audioContext}
+                />
+                <button
+                  onClick={toggleListening}
+                  className={`w-full px-4 py-3 rounded-md transition-colors ${isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+                    } text-white`}
+                >
+                  {isListening ? 'Mute Microphone' : 'Enable Microphone'}
+                </button>
+              </>
+            )}
+            {connection === 'websocket' && (
               <button
-                onClick={toggleListening}
+                onClick={wsToggleListening}
                 className={`w-full px-4 py-3 rounded-md transition-colors ${isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
                   } text-white`}
               >
@@ -84,6 +99,27 @@ const VoiceChat = () => {
               </button>
             )}
           </div>
+        )}
+
+        {/* disconnect button */}
+        {(status === 'connected' || wsStatus === 'connected') && (
+          <>
+            {connection === 'webrtc' && (<button
+              onClick={disconnect}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Disconnect
+            </button>
+            )}
+            {connection === 'websocket' && (
+              <button
+                onClick={wsDisconnect}
+                className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+              >
+                Disconnect
+              </button>
+            )}
+          </>
         )}
 
         {/* Prompt Switch Buttons */}
