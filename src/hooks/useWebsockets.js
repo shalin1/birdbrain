@@ -1,11 +1,14 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { CONFIG } from '../config';
 
 export const useWebSocketAudio = () => {
+    // State variables
     const [status, setStatus] = useState('disconnected');
     const [isListening, setIsListening] = useState(false);
     const [birdPrompt, setBirdPrompt] = useState(CONFIG.BIRD_BRAIN_PROMPT);
+    const [stream, setStream] = useState(null);
 
+    // Refs for persistent variables
     const audioContextRef = useRef(null);
     const websocketRef = useRef(null);
     const mediaStream = useRef(null);
@@ -17,7 +20,12 @@ export const useWebSocketAudio = () => {
     const idleTimeoutRef = useRef(null);
     const animationFrameRef = useRef(null);
     const localSourceRef = useRef(null);
+    const localAnalyserRef = useRef(null);
 
+    /**
+     * Initializes or retrieves the AudioContext.
+     * Ensures the context is resumed if in a suspended state.
+     */
     const initializeAudioContext = async () => {
         if (audioContextRef.current) return audioContextRef.current;
         try {
@@ -34,12 +42,14 @@ export const useWebSocketAudio = () => {
         }
     };
 
+    /**
+     * Sets up an audio element for playback.
+     */
     const setupAudioPlayback = async () => {
         const audio = new Audio();
         audio.autoplay = true;
         audio.playsInline = true;
 
-        // Error handling for audio playback
         audio.onerror = (error) => {
             console.error('Audio playback error:', error);
             setStatus('error');
@@ -49,10 +59,13 @@ export const useWebSocketAudio = () => {
         return audio;
     };
 
+    /**
+     * Initializes the microphone input stream.
+     */
     const initializeAudio = async () => {
         const constraints = {
             audio: {
-                ...CONFIG.WEBRTC.AUDIO_CONSTRAINTS,
+                ...CONFIG.WEBRTC.AUDIO_CONSTRAINTS, // reuse any audio constraints you have defined
             },
         };
 
@@ -64,6 +77,7 @@ export const useWebSocketAudio = () => {
                 throw new Error('No valid audio track available');
             }
             mediaStream.current = localStream;
+            setStream(localStream);
             return localStream;
         } catch (err) {
             console.error('Microphone access failed:', err);
@@ -72,6 +86,194 @@ export const useWebSocketAudio = () => {
         }
     };
 
+    /**
+     * Sends raw audio data to the server over WebSocket.
+     * Expects the WebSocket to be open.
+     */
+    const sendAudioData = (audioData) => {
+        if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+            // Here you might need to format your Float32Array (or other typed array)
+            // into a transferable format (e.g. ArrayBuffer or JSON) that your server expects.
+            // In this example we simply send the raw buffer.
+            websocketRef.current.send(audioData.buffer);
+        }
+    };
+
+    /**
+     * Captures audio from the microphone and sends it over the WebSocket.
+     */
+    const startAudioCapture = () => {
+        if (!audioContextRef.current) {
+            console.error('AudioContext is not initialized.');
+            return;
+        }
+        if (mediaStream.current) {
+            // Create a ScriptProcessorNode for capturing audio data.
+            // Note: ScriptProcessorNode is deprecated. Consider using AudioWorklet if possible.
+            const audioProcessor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+            localSourceRef.current = audioContextRef.current.createMediaStreamSource(mediaStream.current);
+            localSourceRef.current.connect(audioProcessor);
+            // Optionally, you can create a loopback by connecting the source to the destination.
+            // Be cautious about feedback loops if using speakers.
+            // localSourceRef.current.connect(audioContextRef.current.destination);
+            audioProcessor.connect(audioContextRef.current.destination);
+
+            audioProcessor.onaudioprocess = (event) => {
+                const inputData = event.inputBuffer.getChannelData(0);
+                // Copy the Float32Array so that we send a new instance every time.
+                const audioData = new Float32Array(inputData);
+                sendAudioData(audioData);
+            };
+        }
+    };
+
+    /**
+     * Handles incoming messages from the server.
+     */
+    const handleServerMessage = (data) => {
+        if (data.type === 'response.audio.delta') {
+            const base64String = data.delta; // base64-encoded 16-bit PCM
+            if (!base64String) return;
+            const arrayBuf = base64ToArrayBuffer(base64String);
+            playPCM16(arrayBuf);
+        } else {
+            console.log('Received message:', data);
+        }
+    };
+
+    /**
+     * Plays PCM 16-bit audio data received from the server.
+     */
+    let playbackTime = 0;
+    const playPCM16 = (arrayBuffer) => {
+        const audioCtx = audioContextRef.current;
+        const uint8 = new Uint8Array(arrayBuffer);
+        const sampleCount = uint8.length / 2;
+        const serverSampleRate = 24000; // Adjust to your server's sample rate
+        const audioBuffer = audioCtx.createBuffer(1, sampleCount, serverSampleRate);
+        const floatChannel = audioBuffer.getChannelData(0);
+
+        for (let i = 0; i < sampleCount; i++) {
+            let sample = (uint8[2 * i + 1] << 8) | uint8[2 * i];
+            if (sample >= 32768) sample -= 65536;
+            floatChannel[i] = sample / 32768;
+        }
+
+        const chunkDuration = sampleCount / serverSampleRate;
+        if (playbackTime < audioCtx.currentTime) {
+            playbackTime = audioCtx.currentTime;
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+        source.start(playbackTime);
+        playbackTime += chunkDuration;
+    };
+
+    /**
+     * Converts a Base64 string to an ArrayBuffer.
+     */
+    const base64ToArrayBuffer = (base64) => {
+        const binaryString = atob(base64);
+        const length = binaryString.length;
+        const bytes = new Uint8Array(length);
+        for (let i = 0; i < length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes.buffer;
+    };
+
+    /**
+     * Begins the idle monitoring process.
+     * If the connection is idle for a set period, the connection is restarted.
+     */
+    const startIdleMonitoring = () => {
+        if (idleCheckIntervalRef.current) {
+            clearInterval(idleCheckIntervalRef.current);
+        }
+        idleCheckIntervalRef.current = setInterval(() => {
+            const idleTime = Date.now() - lastActivityTimestampRef.current;
+            // Log idle time for debugging:
+            // console.log('Idle time:', idleTime, 'ms');
+            if (idleTime >= 120000) { // 2 minutes of inactivity
+                console.log('2 minutes of inactivity. Closing connection...');
+                disconnect();
+                resetIdleTimer();
+                setTimeout(() => {
+                    console.log('Reconnecting with a fresh state...');
+                    connect();
+                }, 1000);
+            }
+        }, 10000); // Check every 10 seconds
+    };
+
+    /**
+     * Resets the idle timer.
+     */
+    const resetIdleTimer = () => {
+        lastActivityTimestampRef.current = Date.now();
+        if (idleTimeoutRef.current) {
+            clearTimeout(idleTimeoutRef.current);
+            idleTimeoutRef.current = null;
+        }
+    };
+
+    /**
+     * Toggles the microphone on or off.
+     */
+    const toggleListening = () => {
+        if (mediaStream.current) {
+            const audioTrack = mediaStream.current.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !isListening;
+                setIsListening(!isListening);
+            }
+        }
+    };
+
+    /**
+     * Optionally, route the local microphone to the local output.
+     * Use with caution to avoid audio feedback.
+     */
+    const startLocalMonitoring = async () => {
+        if (!audioContextRef.current) {
+            console.error('AudioContext is not initialized.');
+            return;
+        }
+        if (mediaStream.current) {
+            const localSource = audioContextRef.current.createMediaStreamSource(mediaStream.current);
+            localSource.connect(audioContextRef.current.destination);
+        }
+    };
+
+    /**
+     * Sets up local volume monitoring for the microphone.
+     * This can be used to visualize the mic’s input level.
+     */
+    const setupLocalVolumeMonitoring = () => {
+        if (!audioContextRef.current || !mediaStream.current) return;
+        if (!localAnalyserRef.current) {
+            localAnalyserRef.current = audioContextRef.current.createAnalyser();
+            localAnalyserRef.current.fftSize = 256;
+        }
+        if (!localSourceRef.current) {
+            localSourceRef.current = audioContextRef.current.createMediaStreamSource(mediaStream.current);
+            localSourceRef.current.connect(localAnalyserRef.current);
+        }
+        const dataArray = new Uint8Array(localAnalyserRef.current.frequencyBinCount);
+        const update = () => {
+            localAnalyserRef.current.getByteFrequencyData(dataArray);
+            const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+            // For debugging or UI updates, you might log or set state here:
+            // console.log('Local mic volume:', avg);
+            animationFrameRef.current = requestAnimationFrame(update);
+        };
+        update();
+    };
+
+    /**
+     * Establishes a WebSocket connection and sets up audio capture.
+     */
     const connect = async () => {
         if (status === 'connecting' || status === 'connected') {
             console.log('Already connecting or connected');
@@ -83,41 +285,45 @@ export const useWebSocketAudio = () => {
             await initializeAudio();
             await setupAudioPlayback();
 
-            console.log(import.meta.env.VITE_OPENAI_API_KEY, 'OPENAI_API_KEY');
+            // Create the WebSocket connection with any required protocols/headers.
             const ws = new WebSocket(CONFIG.API.REALTIME_ENDPOINT_WS, [
-                "realtime",
-                // Auth
+                'realtime',
+                // Authentication (example – adjust as needed)
                 "openai-insecure-api-key." + import.meta.env.VITE_OPENAI_API_KEY,
-                // Beta protocol, required
                 "openai-beta.realtime-v1"
             ]);
             websocketRef.current = ws;
 
-            setInterval(() => {
+            // Send periodic pings to keep the connection alive.
+            const pingInterval = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: "ping" }));
-                    console.log("Sent keep-alive ping.");
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                    console.log('Sent keep-alive ping.');
                 }
             }, 5000);
+
             ws.onopen = async () => {
                 console.log('WebSocket connection established');
                 setStatus('connected');
-                startAudioCapture();
                 setIsListening(true);
+                // Start capturing audio once connected.
+                startAudioCapture();
+                // Optionally start local volume monitoring.
+                setupLocalVolumeMonitoring();
+                // Optionally start local monitoring (hear your own mic)
+                // startLocalMonitoring();
                 startIdleMonitoring();
-                const event = {
-                    type: "response.create",
-                    response: {
-                        modalities: ["audio", "text"],
-                        instructions: "Give me a haiku about code.",
-                    }
-                }
-                ws.send(JSON.stringify(event));
+                // Clear the ping interval when the connection closes.
+                ws.onclose = () => clearInterval(pingInterval);
             };
 
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleServerMessage(data);
+                try {
+                    const data = JSON.parse(event.data);
+                    handleServerMessage(data);
+                } catch (err) {
+                    console.error('Error parsing WebSocket message:', err);
+                }
             };
 
             ws.onerror = (error) => {
@@ -126,8 +332,7 @@ export const useWebSocketAudio = () => {
             };
 
             ws.onclose = (event) => {
-                console.log(`WebSocket closed: Code = ${event.code}, Reason = ${event.reason}, WasClean = ${event.wasClean}`);
-                console.log("WebSocket state at closure:", ws.readyState);
+                console.log(`WebSocket closed: Code=${event.code}, Reason=${event.reason}`);
                 if (reconnectAttempts.current < maxReconnectAttempts) {
                     reconnectAttempts.current++;
                     setTimeout(connect, 2000);
@@ -144,125 +349,9 @@ export const useWebSocketAudio = () => {
         }
     };
 
-    const sendAudioData = (audioData) => {
-        if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-            websocketRef.current.send(audioData);
-        }
-    };
-
-    const startAudioCapture = () => {
-        if (!audioContextRef.current) {
-            console.error('AudioContext is not initialized.');
-            return;
-        }
-        if (mediaStream.current) {
-            const audioTrack = mediaStream.current.getAudioTracks()[0];
-            const audioProcessor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
-            localSourceRef.current = audioContextRef.current.createMediaStreamSource(mediaStream.current);
-            localSourceRef.current.connect(audioProcessor);
-            audioProcessor.connect(audioContextRef.current.destination);
-
-            audioProcessor.onaudioprocess = (event) => {
-                const inputData = event.inputBuffer.getChannelData(0);
-                const audioData = new Float32Array(inputData);
-                sendAudioData(audioData);
-            };
-        }
-    };
-
-    const handleServerMessage = (data) => {
-        if (data.type === 'response.audio.delta') {
-            const base64String = data.delta; // base64-encoded 16-bit PCM
-            if (!base64String) return;
-
-            // Convert to raw bytes
-            const arrayBuf = base64ToArrayBuffer(base64String);
-            // Interpret as 16-bit PCM
-            playPCM16(arrayBuf);
-        } else {
-            console.log('Received message:', data);
-        }
-    };
-
-    // Just a global or module-level var to track next available playback time
-    let playbackTime = 0;
-
-    function playPCM16(arrayBuffer) {
-        const audioCtx = audioContextRef.current;
-        const uint8 = new Uint8Array(arrayBuffer);
-        const sampleCount = uint8.length / 2;
-
-        const serverSampleRate = 24000; // confirm your real rate
-        const audioBuffer = audioCtx.createBuffer(1, sampleCount, serverSampleRate);
-        const floatChannel = audioBuffer.getChannelData(0);
-
-        for (let i = 0; i < sampleCount; i++) {
-            let sample = (uint8[2 * i + 1] << 8) | uint8[2 * i];
-            if (sample >= 32768) sample -= 65536;
-            floatChannel[i] = sample / 32768;
-        }
-
-        // Calculate chunk duration in seconds
-        const chunkDuration = sampleCount / serverSampleRate;
-
-        // If we've never scheduled anything yet or if clock has caught up, start now
-        if (playbackTime < audioCtx.currentTime) {
-            playbackTime = audioCtx.currentTime;
-        }
-
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioCtx.destination);
-
-        // Schedule chunk to begin exactly at 'playbackTime'
-        source.start(playbackTime);
-
-        // Move the 'playbackTime' forward by the chunk length
-        playbackTime += chunkDuration;
-    }
-
-
-    // 1. Convert the base64 delta string to an ArrayBuffer
-    function base64ToArrayBuffer(base64) {
-        const binaryString = atob(base64);
-        const length = binaryString.length;
-        const bytes = new Uint8Array(length);
-        for (let i = 0; i < length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes.buffer;
-    }
-
-    const startIdleMonitoring = () => {
-        if (idleCheckIntervalRef.current) {
-            clearInterval(idleCheckIntervalRef.current);
-        }
-
-        idleCheckIntervalRef.current = setInterval(() => {
-            const idleTime = Date.now() - lastActivityTimestampRef.current;
-            console.log('Idle time:', idleTime, 'ms');
-
-            if (idleTime >= 120000) {
-                console.log('2 minutes of inactivity. Closing connection...');
-                disconnect();
-                resetIdleTimer();
-
-                setTimeout(() => {
-                    console.log('Reconnecting with a fresh state...');
-                    connect();
-                }, 1000);
-            }
-        }, 10000); // Check every 10 seconds
-    };
-
-    const resetIdleTimer = () => {
-        lastActivityTimestampRef.current = Date.now();
-        if (idleTimeoutRef.current) {
-            clearTimeout(idleTimeoutRef.current);
-            idleTimeoutRef.current = null;
-        }
-    };
-
+    /**
+     * Closes the connection and cleans up resources.
+     */
     const disconnect = () => {
         console.log('Disconnecting...');
 
@@ -292,20 +381,30 @@ export const useWebSocketAudio = () => {
             );
             audioContextRef.current = null;
         }
-
         setStatus('disconnected');
         setIsListening(false);
         console.log('Disconnected successfully.');
     };
+
+    // Cleanup on unmount.
+    useEffect(() => {
+        return () => {
+            disconnect();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return {
         wsStatus: status,
         wsIsListening: isListening,
         wsConnect: connect,
         wsDisconnect: disconnect,
-        // toggleListening,
-        // updatePromptMidSession,
+        wsToggleListening: toggleListening,
+        wsStream: stream,
+        wsAudioContext: audioContextRef.current,
         wsBirdPrompt: birdPrompt,
+        // Optionally, you can expose local monitoring functions:
+        wsStartLocalMonitoring: startLocalMonitoring,
+        wsSetupLocalVolumeMonitoring: setupLocalVolumeMonitoring,
     };
-
-}
+};
