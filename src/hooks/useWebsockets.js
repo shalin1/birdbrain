@@ -233,22 +233,6 @@ export const useWebSocketAudio = () => {
         return bytes.buffer;
     }
 
-
-    const playAudio = async (arrayBuffer) => {
-        console.log(arrayBuffer, 'arrayBuffer')
-        try {
-            // decodeAudioData returns a decoded AudioBuffer
-            const decodedData = await audioContextRef.current.decodeAudioData(arrayBuffer);
-            const source = audioContextRef.current.createBufferSource();
-            source.buffer = decodedData;
-            source.connect(audioContextRef.current.destination);
-            source.start();
-        } catch (err) {
-            console.error("decodeAudioData error:", err);
-        }
-    };
-
-
     const startIdleMonitoring = () => {
         if (idleCheckIntervalRef.current) {
             clearInterval(idleCheckIntervalRef.current);
