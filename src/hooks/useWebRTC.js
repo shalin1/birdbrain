@@ -100,7 +100,7 @@ export const useWebRTC = () => {
    */
   const initializeAudioContext = async () => {
     if (audioContext) return audioContext;
-    
+
     try {
       const newCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (newCtx.state === 'suspended') {
@@ -135,7 +135,7 @@ export const useWebRTC = () => {
       await initializeAudioContext();
       const localStream = await navigator.mediaDevices.getUserMedia(constraints);
       const audioTrack = localStream.getAudioTracks()[0];
-      
+
       if (!audioTrack || !audioTrack.enabled) {
         throw new Error('No valid audio track available');
       }
@@ -158,7 +158,7 @@ export const useWebRTC = () => {
     const audio = new Audio();
     audio.autoplay = true;
     audio.playsInline = true;
-    
+
     // Error handling for audio playback
     audio.onerror = (error) => {
       console.error('Audio playback error:', error);
@@ -175,7 +175,7 @@ export const useWebRTC = () => {
    */
   const fetchSessionWithRetry = async (retries = 3) => {
     let lastError;
-    
+
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         const response = await fetch(
@@ -198,7 +198,7 @@ export const useWebRTC = () => {
         lastError = error;
 
         if (attempt < retries - 1) {
-          await new Promise(resolve => 
+          await new Promise(resolve =>
             setTimeout(resolve, 1000 * Math.pow(2, attempt))
           );
         }
@@ -217,7 +217,7 @@ export const useWebRTC = () => {
   const setupConnectionMonitoring = (pc) => {
     pc.oniceconnectionstatechange = () => {
       console.log('ICE state:', pc.iceConnectionState);
-      
+
       switch (pc.iceConnectionState) {
         case 'checking':
           setStatus('establishing connection...');
@@ -268,7 +268,7 @@ export const useWebRTC = () => {
 
       localAnalyserRef.current.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      
+
       if (remoteGainNodeRef.current) {
         remoteGainNodeRef.current.gain.value = avg > 50 ? 0.5 : 1.0;
       }
@@ -299,7 +299,7 @@ export const useWebRTC = () => {
    */
   const resetIdleTimer = () => {
     lastActivityTimestampRef.current = Date.now();
-    
+
     if (idleTimeoutRef.current) {
       clearTimeout(idleTimeoutRef.current);
       idleTimeoutRef.current = null;
@@ -323,7 +323,7 @@ export const useWebRTC = () => {
           type: 'session.update',
           session: {
             instructions: `You must respond exactly with ${randomMessage} without variation.`,
-            modalities: ['audio','text'],
+            modalities: ['audio', 'text'],
             temperature: 0.6,
           }
         })
@@ -336,7 +336,7 @@ export const useWebRTC = () => {
             event_id: `lonely_${Date.now()}`,
             type: 'response.create',
             response: {
-              modalities: ['audio','text']
+              modalities: ['audio', 'text']
             }
           })
         );
@@ -348,33 +348,32 @@ export const useWebRTC = () => {
    * Starts the idle monitoring system
    * Checks for inactivity every 10 seconds
    */
-const startIdleMonitoring = () => {
-  if (idleCheckIntervalRef.current) {
-    clearInterval(idleCheckIntervalRef.current);
-  }
-
-  idleCheckIntervalRef.current = setInterval(() => {
-    const idleTime = Date.now() - lastActivityTimestampRef.current;
-    console.log('Idle time:', idleTime, 'ms');
-
-    if (idleTime >= 120000) {
-      console.log('2 minutes of inactivity. Closing connection...');
-      // Close current connection
-      disconnect();
-
-      // Give a small delay before reconnecting,
-      // ensuring we tear down resources cleanly.
-      setTimeout(() => {
-        console.log('Reconnecting with a fresh state...');
-        connect();
-      }, 1000);
+  const startIdleMonitoring = () => {
+    if (idleCheckIntervalRef.current) {
+      clearInterval(idleCheckIntervalRef.current);
     }
-    // Optional: after 30 seconds of inactivity, send a "lonely message"
-    // else if (idleTime % 30000 < 10) {
-    //   sendLonelyMessage();
-    // }
-  }, 10); // Check every 5 seconds
-};
+
+    idleCheckIntervalRef.current = setInterval(() => {
+      const idleTime = Date.now() - lastActivityTimestampRef.current;
+
+      if (idleTime >= 120000) {
+        console.log('2 minutes of inactivity. Closing connection...');
+        // Close current connection
+        disconnect();
+
+        // Give a small delay before reconnecting,
+        // ensuring we tear down resources cleanly.
+        setTimeout(() => {
+          console.log('Reconnecting with a fresh state...');
+          connect();
+        }, 1000);
+      }
+      // Optional: after 30 seconds of inactivity, send a "lonely message"
+      // else if (idleTime % 30000 < 10) {
+      //   sendLonelyMessage();
+      // }
+    }, 10); // Check every 5 seconds
+  };
 
 
   /**
@@ -383,7 +382,7 @@ const startIdleMonitoring = () => {
    */
   const updatePromptMidSession = (newPrompt) => {
     setBirdPrompt(newPrompt);
-    
+
     if (dataChannel.current?.readyState === 'open') {
       dataChannel.current.send(
         JSON.stringify({
@@ -411,7 +410,7 @@ const startIdleMonitoring = () => {
 
     try {
       setStatus('connecting');
-      
+
       const ctx = await initializeAudioContext();
       const localStream = await initializeAudio();
       const audioEl = await setupAudioPlayback();
@@ -423,13 +422,13 @@ const startIdleMonitoring = () => {
       peerConnection.current = pc;
 
       setupConnectionMonitoring(pc);
-      
+
       const audioTrack = localStream.getAudioTracks()[0];
       pc.addTrack(audioTrack, localStream);
 
       const dc = pc.createDataChannel('oai-events');
       dataChannel.current = dc;
-      
+
       dc.onopen = () => {
         console.log('Data channel open');
         setStatus('connected');
@@ -453,7 +452,7 @@ const startIdleMonitoring = () => {
       dc.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if(data.type==='response.done'){
+          if (data.type === 'response.done') {
             dataChannel.current.send(
               JSON.stringify({
                 event_id: `reset_${Date.now()}`,
@@ -560,7 +559,7 @@ const startIdleMonitoring = () => {
 
   const disconnect = () => {
     console.log('Disconnecting...');
-  
+
     // Clear intervals/timeouts
     resetIdleTimer();
     if (idleCheckIntervalRef.current) {
@@ -571,31 +570,31 @@ const startIdleMonitoring = () => {
       clearTimeout(idleTimeoutRef.current);
       idleTimeoutRef.current = null;
     }
-  
+
     // Stop the volume monitoring animation
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-  
+
     // Stop all local media tracks
     if (mediaStream.current) {
       mediaStream.current.getTracks().forEach((track) => track.stop());
       mediaStream.current = null;
     }
-  
+
     // Close peer connection
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
     }
-  
+
     // Data channel cleanup
     if (dataChannel.current) {
       dataChannel.current.close();
       dataChannel.current = null;
     }
-  
+
     // Optionally close/reset the audio context
     if (audioContext) {
       audioContext.close().catch((err) =>
@@ -603,14 +602,14 @@ const startIdleMonitoring = () => {
       );
       setAudioContext(null);
     }
-  
+
     setStream(null);
     setStatus('disconnected');
     setIsListening(false);
-    
+
     console.log('Disconnected successfully.');
   };
-  
+
   return {
     status,
     isListening,

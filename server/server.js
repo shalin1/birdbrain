@@ -11,9 +11,6 @@ console.log('Environment variables:', process.env.NODE_ENV);
 
 dotenv.config();
 
-// Debug API key (don't log the actual key, just check if it exists)
-console.log('API key exists:', !!process.env.OPENAI_API_KEY);
-
 const app = express();
 
 // More debugging
@@ -46,7 +43,7 @@ app.get('/session', async (req, res) => {
         }
 
         const data = JSON.parse(responseText);
-        
+
         if (!data.client_secret?.value) {
             throw new Error('Invalid response from OpenAI - missing client_secret');
         }
@@ -55,9 +52,9 @@ app.get('/session', async (req, res) => {
         res.json(data);
     } catch (error) {
         console.error('Session error:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             error: error.message,
-            stack: error.stack 
+            stack: error.stack
         });
     }
 });

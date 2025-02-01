@@ -6,19 +6,36 @@ import AudioMeter from './components/AudioMeter';
 import { useWebSocketAudio } from './hooks/useWebsockets';
 
 const VoiceChat = () => {
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [connection, setConnection] = useState('webrtc');
+
   const {
     status,
     isListening,
     connect,
+    stream,
     toggleListening,
     birdPrompt,
     updatePromptMidSession,
+  } = useWebRTC();
+  const {
+    wsStatus,
+    wsIsListening,
+    wsConnect,
+    wsDisconnect,
+    wsBirdPrompt,
+    wsUpdatePromptMidSession,
   } = useWebSocketAudio();
 
-  const [customPrompt, setCustomPrompt] = useState('');
+  const connectToOpenAiRealtimeWebsocket = () => {
+    setConnection('websocket');
+    wsConnect();
+  }
 
-  // Helper to set the active prompt
-  const switchPrompt = (prompt) => updatePromptMidSession(prompt);
+  const connectToOpenAiRealtimeWebrtc = () => {
+    setConnection('webrtc');
+    connect();
+  }
 
   return (
     <div className="w-full min-h-screen bg-gray-900 text-white p-4">
@@ -33,74 +50,83 @@ const VoiceChat = () => {
 
         {/* Connect button if not connected */}
         {status === 'disconnected' && (
-          <button
-            onClick={connect}
-            className="w-full bg-blue-600 text-white px-4 py-3 rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Connect
-          </button>
+          <>
+            <button
+              onClick={connectToOpenAiRealtimeWebrtc}
+              className="w-full bg-blue-600 text-white px-4 py-3 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Connect to openAi Realtime via webrtc
+            </button>
+            <button
+              onClick={connectToOpenAiRealtimeWebsocket}
+              className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
+            >
+              Connect to openAi Realtime via websocket
+            </button>
+          </>
         )}
 
         {/* Audio Meter and Mute Button if connected */}
         {status === 'connected' && (
           <div className="space-y-4">
-            {/* <AudioMeter
+            <AudioMeter
               stream={stream}
               isListening={isListening}
               audioContext={audioContext}
-            /> */}
-            <button
-              onClick={toggleListening}
-              className={`w-full px-4 py-3 rounded-md transition-colors ${
-                isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
-              } text-white`}
-            >
-              {isListening ? 'Mute Microphone' : 'Enable Microphone'}
-            </button>
+            />
+            {connection === 'webrtc' && (
+              <button
+                onClick={toggleListening}
+                className={`w-full px-4 py-3 rounded-md transition-colors ${isListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+                  } text-white`}
+              >
+                {isListening ? 'Mute Microphone' : 'Enable Microphone'}
+              </button>
+            )}
           </div>
         )}
 
-        {/* Prompt Switch Buttons (vertical stack) */}
+        {/* Prompt Switch Buttons */}
         <div className="space-y-2">
           <h3 className="font-semibold text-sm text-gray-300">Switch Prompt Mode</h3>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE)}
             className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
           >
             Dismissive
           </button>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT)}
             className="w-full bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors"
           >
             Curious
           </button>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT_GAMEMASTER)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT_GAMEMASTER)}
             className="w-full bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600 transition-colors"
           >
             Game Master
           </button>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT_NARC_MODE)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT_NARC_MODE)}
             className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
           >
             Narc Mode
           </button>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT_EXTRA_RUDE)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT_EXTRA_RUDE)}
             className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
           >
             Extra Rude
           </button>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT_PSYCHEDELIC)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT_PSYCHEDELIC)}
             className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
           >
             Psychedelic
           </button>
           <button
-            onClick={() => switchPrompt(CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE_COP_SUSPECTION)}
+            onClick={() => updatePromptMidSession(CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE_COP_SUSPECTION)}
             className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
           >
             Dismissive Cop Suspicion
@@ -120,7 +146,7 @@ const VoiceChat = () => {
             />
           </label>
           <button
-            onClick={() => switchPrompt(customPrompt)}
+            onClick={() => updatePromptMidSession(customPrompt)}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors w-full"
           >
             Use Custom Prompt
