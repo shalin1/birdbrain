@@ -62,6 +62,7 @@ export const useWebRTC = () => {
   const [stream, setStream] = useState(null);
   const [audioContext, setAudioContext] = useState(null);
   const [birdPrompt, setBirdPrompt] = useState(CONFIG.BIRD_BRAIN_PROMPT);
+  const [temperature, setTemperature] = useState(0.8)
 
   // Core WebRTC refs - persist across renders but don't trigger updates
   const peerConnection = useRef(null);
@@ -390,7 +391,7 @@ export const useWebRTC = () => {
           type: 'session.update',
           session: {
             instructions: newPrompt,
-            temperature: 0.6,
+            temperature: temperature,
           },
         })
       );
@@ -440,7 +441,7 @@ export const useWebRTC = () => {
             response: {
               modalities: ['text', 'audio'],
               instructions: birdPrompt,
-              temperature: 0.6
+              temperature: temperature
             },
           })
         );
@@ -619,6 +620,8 @@ export const useWebRTC = () => {
     stream,
     audioContext,
     updatePromptMidSession,
-    birdPrompt
+    birdPrompt,
+    temperature,
+    setTemperature
   };
 };

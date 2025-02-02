@@ -20,6 +20,8 @@ const VoiceChat = () => {
     updatePromptMidSession,
     audioContext,
     disconnect,
+    temperature,
+    setTemperature
   } = useWebRTC();
 
   // Destructure values from the WebSocket hook.
@@ -211,7 +213,22 @@ const VoiceChat = () => {
             </p>
           </div>
         )}
-
+        {/* Temperature Slider */}
+        <div className="p-4 max-w-md mx-auto">
+          <label htmlFor="temperature" className="block mb-2 font-semibold">
+            Temperature: {temperature}
+          </label>
+          <input
+            id="temperature"
+            type="range"
+            min="0.6"
+            max="1.2"
+            step="0.1"
+            value={temperature}
+            onChange={(e) => setTemperature(parseFloat(e.target.value))}
+            className="w-full"
+          />
+        </div>
         {/* Editable Current Prompt Display */}
         <div className="text-sm text-gray-400 pt-2">
           <label className="font-semibold">Current Prompt:</label>
