@@ -357,18 +357,18 @@ export const useWebRTC = () => {
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
 
-      if (idleTime >= 120000) {
-        console.log('2 minutes of inactivity. Closing connection...');
-        // Close current connection
-        disconnect();
+      // if (idleTime >= 120000) {
+      //   console.log('2 minutes of inactivity. Closing connection...');
+      //   // Close current connection
+      //   disconnect();
 
-        // Give a small delay before reconnecting,
-        // ensuring we tear down resources cleanly.
-        setTimeout(() => {
-          console.log('Reconnecting with a fresh state...');
-          connect();
-        }, 1000);
-      }
+      //   // Give a small delay before reconnecting,
+      //   // ensuring we tear down resources cleanly.
+      //   setTimeout(() => {
+      //     console.log('Reconnecting with a fresh state...');
+      //     connect();
+      //   }, 1000);
+      // }
       // Optional: after 30 seconds of inactivity, send a "lonely message"
       // else if (idleTime % 30000 < 10) {
       //   sendLonelyMessage();
@@ -453,7 +453,11 @@ export const useWebRTC = () => {
       dc.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'response.done') {
+          if (data.type === 'response.output_item.added') {
+            setStatus('responding')
+          }
+          if (data.type === 'output_audio_buffer.audio_stopped') {
+            setStatus('connected');
             dataChannel.current.send(
               JSON.stringify({
                 event_id: `reset_${Date.now()}`,
@@ -559,8 +563,61 @@ export const useWebRTC = () => {
   }, []);
 
   const disconnect = () => {
-    console.log('Disconnecting...');
+    // First check if data channel is available and open
+    if (!dataChannel.current || dataChannel.current.readyState !== 'open') {
+      console.log('Data channel not available, proceeding with cleanup');
+      cleanupConnection();
+      return;
+    }
 
+    // Set up message handler before sending goodbye
+    dataChannel.current.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('Disconnect flow received message:', data);
+
+        if (data.type === 'output_audio_buffer.audio_stopped') {
+          console.log('Server acknowledged goodbye, cleaning up connection');
+          cleanupConnection();
+        }
+      } catch (err) {
+        console.error('Error handling disconnect message:', err);
+        cleanupConnection();
+      }
+    };
+
+    // Send goodbye message
+    console.log('Sending goodbye message');
+    try {
+      dataChannel.current.send(
+        JSON.stringify({
+          event_id: `goodbye_${Date.now()}`,
+          type: 'session.update',
+          session: {
+            instructions: 'say exactly "goodbye, farewell, i wish you the best, adios!"',
+            temperature: 0.6,
+          }
+        })
+      );
+
+      // Force a response 
+      dataChannel.current.send(
+        JSON.stringify({
+          event_id: `goodbye_response_${Date.now()}`,
+          type: 'response.create',
+          response: {
+            modalities: ['text', 'audio'],
+          }
+        })
+      );
+    } catch (err) {
+      console.error('Error sending goodbye message:', err);
+      cleanupConnection();
+    }
+  };
+
+  // Move cleanup logic to separate function
+  const cleanupConnection = () => {
     // Clear intervals/timeouts
     resetIdleTimer();
     if (idleCheckIntervalRef.current) {
@@ -572,13 +629,13 @@ export const useWebRTC = () => {
       idleTimeoutRef.current = null;
     }
 
-    // Stop the volume monitoring animation
+    // Stop animation frame
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
 
-    // Stop all local media tracks
+    // Stop media streams
     if (mediaStream.current) {
       mediaStream.current.getTracks().forEach((track) => track.stop());
       mediaStream.current = null;
@@ -590,13 +647,13 @@ export const useWebRTC = () => {
       peerConnection.current = null;
     }
 
-    // Data channel cleanup
+    // Close data channel
     if (dataChannel.current) {
       dataChannel.current.close();
       dataChannel.current = null;
     }
 
-    // Optionally close/reset the audio context
+    // Close audio context
     if (audioContext) {
       audioContext.close().catch((err) =>
         console.error('Error closing audio context:', err)

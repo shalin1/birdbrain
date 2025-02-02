@@ -108,7 +108,7 @@ const VoiceChat = () => {
         )}
 
         {/* Audio Meter and Microphone Toggle */}
-        {(status === 'connected' || wsStatus === 'connected') && (
+        {(status === 'connected' || status === 'responding' || wsStatus === 'connected') && (
           <div className="space-y-4">
             <AudioMeter
               stream={stream || wsStream}
@@ -137,7 +137,7 @@ const VoiceChat = () => {
         )}
 
         {/* Disconnect Button */}
-        {(status === 'connected' || wsStatus === 'connected') && (
+        {(status === 'connected' || status === 'responding' || wsStatus === 'connected') && (
           <>
             {connection === 'webrtc' && (
               <button
