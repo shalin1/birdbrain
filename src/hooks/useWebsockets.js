@@ -72,7 +72,25 @@ export const useWebSocketAudio = () => {
 
         try {
             await initializeAudioContext();
-            const localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            const localStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+            const sourceNode = audioContextRef.current.createMediaStreamSource(localStream);
+            const scriptProcessor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+            scriptProcessor.onaudioprocess = (audioEvent) => {
+                const inputBuffer = audioEvent.inputBuffer.getChannelData(0);
+                const pcm16Buffer = float32ToInt16(inputBuffer);
+
+                if (audioContextRef.current && audioWebsocketRef.current && audioWebsocketRef.current.readyState === WebSocket.OPEN) {
+                    audioWebsocketRef.current.send(pcm16Buffer);
+                }
+            };
+            sourceNode.connect(scriptProcessor);
+            scriptProcessor.connect(audioContextRef.current.destination);
             const audioTrack = localStream.getAudioTracks()[0];
             if (!audioTrack || !audioTrack.enabled) {
                 throw new Error('No valid audio track available');
@@ -87,6 +105,15 @@ export const useWebSocketAudio = () => {
         }
     };
 
+    const float32ToInt16 = (float32Array) => {
+        const len = float32Array.length;
+        const int16Array = new Int16Array(len);
+        for (let i = 0; i < len; i++) {
+            let s = Math.max(-1, Math.min(1, float32Array[i]));
+            int16Array[i] = s < 0 ? s * 32768 : s * 32767;
+        }
+        return int16Array.buffer;
+    }
     /**
      * Sends raw audio data to the server over WebSocket.
      * Expects the WebSocket to be open.
@@ -286,23 +313,47 @@ export const useWebSocketAudio = () => {
             await initializeAudio();
             await setupAudioPlayback();
 
-            // Create the WebSocket connection with any required protocols/headers.
             const transcriptWs = new WebSocket('wss://78e3-2603-7000-8df0-77a0-48b1-c9db-28cd-1b87.ngrok-free.app/transcripts');
             transcriptWebsocketRef.current = transcriptWs;
+            transcriptWs.onopen = () => {
+                console.log('Transcript WebSocket connection established');
+                setStatus('connected');
+            };
+            transcriptWs.onmessage = (event) => {
+                const data = JSON.parse(event.data);
 
-            const audioWs = new WebSocket('wss://78e3-2603-7000-8df0-77a0-48b1-c9db-28cd-1b87.ngrok-free.app/transcripts');
+                switch (data.type) {
+                    case 'transcript':
+                        console.log(`You: ${data.text}`, 'transcript');
+                        break;
+                    case 'llm_response':
+                        console.log(`Assistant: ${data.text}`, 'llm-response');
+                        break;
+                    case 'tts_response':
+                        playAudio(data.audio);
+                        break;
+                    case 'error':
+                        console.error('Server error:', data.text);
+                        console.log(`Error: ${data.text}`, 'error');
+                        break;
+                    case 'session_updated':
+                        console.log('Session updated:', data);
+                        break;
+                    default:
+                        console.warn("Unknown message type:", data);
+                }
+            };
+            transcriptWs.onclose = () => updateStatus('Disconnected');
+            transcriptWs.onerror = (e) => {
+                console.error("Transcript WebSocket error", e);
+                updateStatus(transcriptStatus, 'Error');
+            };
+
+            const audioWs = new WebSocket('wss://78e3-2603-7000-8df0-77a0-48b1-c9db-28cd-1b87.ngrok-free.app/audio_in');
+            audioWs.binaryType = "arraybuffer";
             audioWebsocketRef.current = audioWs;
-
-            // Send periodic pings to keep the connection alive.
-            // const pingInterval = setInterval(() => {
-            //     if (ws.readyState === WebSocket.OPEN) {
-            //         ws.send(JSON.stringify({ type: 'ping' }));
-            //         console.log('Sent keep-alive ping.');
-            //     }
-            // }, 5000);
-
-            transcriptWs.onopen = async () => {
-                console.log('WebSocket connection established');
+            audioWs.onopen = () => {
+                console.log('Audio input websocket connection established');
                 setStatus('connected');
                 setIsListening(true);
                 // Start capturing audio once connected.
@@ -313,8 +364,24 @@ export const useWebSocketAudio = () => {
                 // startLocalMonitoring();
                 startIdleMonitoring();
                 // Clear the ping interval when the connection closes.
-                transcriptWs.onclose = () => clearInterval(pingInterval);
+                audioWs.onclose = () => clearInterval(pingInterval);
             };
+            audioWs.onclose = () => {
+                console.log("Audio WebSocket disconnected");
+                setStatus('Disconnected');
+            };
+            audioWs.onerror = (e) => {
+                console.error("Audio WebSocket error", e);
+                setStatus('Error');
+            };
+
+            // Send periodic pings to keep the connection alive.
+            // const pingInterval = setInterval(() => {
+            //     if (ws.readyState === WebSocket.OPEN) {
+            //         ws.send(JSON.stringify({ type: 'ping' }));
+            //         console.log('Sent keep-alive ping.');
+            //     }
+            // }, 5000);
 
             audioWs.onmessage = (event) => {
                 try {
