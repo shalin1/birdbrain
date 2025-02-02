@@ -81,19 +81,7 @@ export const useWebRTC = () => {
   // Idle detection references
   const lastActivityTimestampRef = useRef(Date.now());
   const idleCheckIntervalRef = useRef(null);
-  const idleTimeoutRef = useRef(null);
 
-  // Variety of messages for idle responses
-  const lonelyMessages = [
-    "*shuffles robotically* Anyone there? My circuits are getting lonely...",
-    "SQUAWK! If a bird-brain speaks in an empty room, does it make a sound?",
-    "*pecks at microphone* Testing, testing... is this thing still on?",
-    "My research is suffering from lack of human interaction! SQUAWK!",
-    "I'm beginning to think you're all just figments of my silicon imagination...",
-    "*taps beak on screen* Hello? Any wayward mimes out there?",
-    "The crushing solitude of being a cyber-avian academic... SQUAWK!",
-    "My thesis on human behavior is getting dusty... anyone want to contribute?",
-  ];
 
   /**
    * Initializes or retrieves the AudioContext
@@ -127,6 +115,9 @@ export const useWebRTC = () => {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+        googEchoCancellation: true,
+        googNoiseSuppression: true,
+        googAutoGainControl: true,
         sampleRate: 48000,
         channelCount: 1,
       },
@@ -519,9 +510,6 @@ export const useWebRTC = () => {
       if (idleCheckIntervalRef.current) {
         clearInterval(idleCheckIntervalRef.current);
       }
-      if (idleTimeoutRef.current) {
-        clearTimeout(idleTimeoutRef.current);
-      }
 
       // Stop animation frame
       if (animationFrameRef.current) {
@@ -607,10 +595,6 @@ export const useWebRTC = () => {
     if (idleCheckIntervalRef.current) {
       clearInterval(idleCheckIntervalRef.current);
       idleCheckIntervalRef.current = null;
-    }
-    if (idleTimeoutRef.current) {
-      clearTimeout(idleTimeoutRef.current);
-      idleTimeoutRef.current = null;
     }
 
     // Stop animation frame
