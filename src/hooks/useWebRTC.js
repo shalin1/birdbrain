@@ -295,19 +295,6 @@ export const useWebRTC = () => {
   };
 
   /**
-   * Resets the idle timer
-   * Called on user activity or manual reset
-   */
-  const resetIdleTimer = () => {
-    lastActivityTimestampRef.current = Date.now();
-
-    if (idleTimeoutRef.current) {
-      clearTimeout(idleTimeoutRef.current);
-      idleTimeoutRef.current = null;
-    }
-  };
-
-  /**
    * Sends a random lonely message when idle
    * Ensures message variety and appropriate timing
    */
@@ -345,9 +332,12 @@ export const useWebRTC = () => {
     }
   };
 
+  const resetIdleTimer = () => {
+    lastActivityTimestampRef.current = Date.now();
+  }
   /**
    * Starts the idle monitoring system
-   * Checks for inactivity every 10 seconds
+   * Checks for inactivity every 30 seconds
    */
   const startIdleMonitoring = () => {
     if (idleCheckIntervalRef.current) {
@@ -356,24 +346,16 @@ export const useWebRTC = () => {
 
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
-
-      // if (idleTime >= 120000) {
-      //   console.log('2 minutes of inactivity. Closing connection...');
-      //   // Close current connection
-      //   disconnect();
-
-      //   // Give a small delay before reconnecting,
-      //   // ensuring we tear down resources cleanly.
-      //   setTimeout(() => {
-      //     console.log('Reconnecting with a fresh state...');
-      //     connect();
-      //   }, 1000);
-      // }
-      // Optional: after 30 seconds of inactivity, send a "lonely message"
-      // else if (idleTime % 30000 < 10) {
-      //   sendLonelyMessage();
-      // }
-    }, 10); // Check every 5 seconds
+      if (idleTime >= 30000) {
+        console.log('30 seconds of inactivity. Closing connection...');
+        disconnect();
+        resetIdleTimer();
+        setTimeout(() => {
+          console.log('Reconnecting...');
+          connect();
+        }, 30000);
+      }
+    }, 100); // Check every 5 seconds
   };
 
 
@@ -455,6 +437,7 @@ export const useWebRTC = () => {
           const data = JSON.parse(event.data);
           if (data.type === 'response.output_item.added') {
             setStatus('responding')
+            resetIdleTimer();
           }
           if (data.type === 'output_audio_buffer.audio_stopped') {
             setStatus('connected');
@@ -464,10 +447,11 @@ export const useWebRTC = () => {
                 type: 'session.update',
                 session: {
                   instructions: birdPrompt,
-                  temperature: 0.6,
+                  temperature: temperature,
                 }
               })
             );
+            resetIdleTimer();
           }
           console.log('Received WebRTC message:', data);
         } catch (err) {
@@ -594,8 +578,8 @@ export const useWebRTC = () => {
           event_id: `goodbye_${Date.now()}`,
           type: 'session.update',
           session: {
-            instructions: 'say exactly "goodbye, farewell, i wish you the best, adios!"',
-            temperature: 0.6,
+            instructions: 'say exactly "Well this has been just great. Wow. Goodbye, farewell, I wish you the best, adios!", but also include a fun callback to the earlier conversation',
+            temperature: temperature,
           }
         })
       );
