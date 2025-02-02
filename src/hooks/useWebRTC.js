@@ -337,7 +337,7 @@ export const useWebRTC = () => {
   }
   /**
    * Starts the idle monitoring system
-   * Checks for inactivity every 30 seconds
+   * Checks for inactivity every 45 seconds
    */
   const startIdleMonitoring = () => {
     if (idleCheckIntervalRef.current) {
@@ -346,14 +346,14 @@ export const useWebRTC = () => {
 
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
-      if (idleTime >= 30000) {
-        console.log('30 seconds of inactivity. Closing connection...');
+      if (idleTime >= 45000) {
+        console.log('45 seconds of inactivity. Closing connection...');
         disconnect();
         resetIdleTimer();
         setTimeout(() => {
           console.log('Reconnecting...');
           connect();
-        }, 30000);
+        }, 7000);
       }
     }, 100); // Check every 5 seconds
   };
