@@ -1,5 +1,5 @@
 // src/VoiceChat.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWebRTC } from './hooks/useWebRTC';
 import { useWebSocketAudio } from './hooks/useWebsockets';
 import { CONFIG } from './config';
@@ -37,6 +37,23 @@ const VoiceChat = () => {
   // Use connection type to choose which status and prompt to display.
   const displayStatus = connection === 'webrtc' ? status : wsStatus;
   const displayBirdPrompt = connection === 'webrtc' ? birdPrompt : wsBirdPrompt;
+
+  // New state for an editable version of the bird prompt.
+  const [editableBirdPrompt, setEditableBirdPrompt] = useState(displayBirdPrompt);
+
+  // Sync the editable text field with any changes to the prompt from the hook.
+  useEffect(() => {
+    setEditableBirdPrompt(displayBirdPrompt);
+  }, [displayBirdPrompt]);
+
+  // Handler to update the prompt as the user types.
+  const handleEditableBirdPromptChange = (e) => {
+    const newPrompt = e.target.value;
+    setEditableBirdPrompt(newPrompt);
+    if (connection === 'webrtc') {
+      updatePromptMidSession(newPrompt);
+    }
+  };
 
   // Functions to initiate the connection.
   const connectToOpenAiRealtimeWebrtc = () => {
@@ -144,16 +161,16 @@ const VoiceChat = () => {
           <div className="space-y-2">
             <h3 className="font-semibold text-sm text-gray-300">Switch Prompt Mode</h3>
             <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT)}
+              className="w-full bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors"
+            >
+              Default
+            </button>
+            <button
               onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE)}
               className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
             >
               Dismissive
-            </button>
-            <button
-              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT)}
-              className="w-full bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors"
-            >
-              Curious
             </button>
             <button
               onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_GAMEMASTER)}
@@ -195,35 +212,17 @@ const VoiceChat = () => {
           </div>
         )}
 
-        {/* Custom Prompt */}
-        <div className="mt-3 space-y-2">
-          <label className="block text-sm font-semibold text-gray-300">
-            Custom Prompt
-            <textarea
-              rows={3}
-              className="w-full mt-1 p-2 border border-gray-700 rounded bg-gray-900 text-gray-100 placeholder-gray-500"
-              value={customPrompt}
-              onChange={(e) => setCustomPrompt(e.target.value)}
-              placeholder="Type your custom instructions..."
-            />
-          </label>
-          <button
-            onClick={() => handleUpdatePrompt(customPrompt)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors w-full"
-          >
-            Use Custom Prompt
-          </button>
-        </div>
-
-        {/* Current Prompt Display */}
+        {/* Editable Current Prompt Display */}
         <div className="text-sm text-gray-400 pt-2">
-          <strong>Current Prompt:</strong>
-          <div
-            className="w-[300px] whitespace-pre-wrap break-words text-gray-300 mt-1"
-            style={{ wordBreak: 'break-word' }}
-          >
-            {displayBirdPrompt}
-          </div>
+          <label className="font-semibold">Current Prompt:</label>
+          <textarea
+            rows={35}  // Increased number of rows for a bigger display
+            className="w-full mt-1 p-2 border border-gray-700 rounded bg-gray-900 text-gray-300"
+            style={{ width: '100%' }}
+            value={editableBirdPrompt}
+            onChange={handleEditableBirdPromptChange}
+            disabled={connection !== 'webrtc'}
+          />
         </div>
       </div>
     </div>

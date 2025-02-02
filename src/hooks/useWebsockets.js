@@ -438,8 +438,8 @@ export const useWebSocketAudio = () => {
             mediaStream.current = null;
         }
         if (audioWebsocketRef.current) {
-            websocketRef.current.close();
-            websocketRef.current = null;
+            audioWebsocketRef.current.close();
+            audioWebsocketRef.current = null;
         }
         if (transcriptWebsocketRef.current) {
             transcriptWebsocketRef.current.close();

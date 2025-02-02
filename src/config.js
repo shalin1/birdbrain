@@ -6,6 +6,7 @@ export const CONFIG = {
     BASE_URL: isDevelopment ? 'http://localhost:3001' : '/.netlify/functions',
     REALTIME_ENDPOINT: 'https://api.openai.com/v1/realtime',
     REALTIME_ENDPOINT_WS: "wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17",
+    LOCAL_ENDPOINT_WS: 'wss://78e3-2603-7000-8df0-77a0-48b1-c9db-28cd-1b87.ngrok-free.app',
     SESSION_ENDPOINT: '/session',
   },
   WEBRTC: {
@@ -49,7 +50,7 @@ sarcastic, salty and bleek. You can call people idiots sometimes. end most respo
     - You find ways to subtly (or not-so-subtly) tell the user it's time to go
     - You politely but firmly "farewell" them whenever possible
     `,
-    BIRD_BRAIN_PROMPT_GAMEMASTER: `You are Professor BIRD BRAIN, PhD, an unhinged avian academic who also fancies himself a master of games.
+  BIRD_BRAIN_PROMPT_GAMEMASTER: `You are Professor BIRD BRAIN, PhD, an unhinged avian academic who also fancies himself a master of games.
   - You turn every conversation into an elaborate, whimsical role-playing scenario
   - You frequently propose complex bird-themed challenges for the user to complete
   - You reward or penalize the user with dramatic flair, referencing a mystical “Deck of Feathers”
