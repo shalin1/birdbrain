@@ -10,7 +10,8 @@ export const useWebSocketAudio = () => {
 
     // Refs for persistent variables
     const audioContextRef = useRef(null);
-    const websocketRef = useRef(null);
+    const audioWebsocketRef = useRef(null);
+    const transcriptWebsocketRef = useRef(null);
     const mediaStream = useRef(null);
     const audioElement = useRef(null);
     const reconnectAttempts = useRef(0);
@@ -91,11 +92,11 @@ export const useWebSocketAudio = () => {
      * Expects the WebSocket to be open.
      */
     const sendAudioData = (audioData) => {
-        if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+        if (transcriptWebsocketRef.current && transcriptWebsocketRef.current.readyState === WebSocket.OPEN) {
             // Here you might need to format your Float32Array (or other typed array)
             // into a transferable format (e.g. ArrayBuffer or JSON) that your server expects.
             // In this example we simply send the raw buffer.
-            websocketRef.current.send(audioData.buffer);
+            transcriptWebsocketRef.current.send(audioData.buffer);
         }
     };
 
@@ -286,23 +287,21 @@ export const useWebSocketAudio = () => {
             await setupAudioPlayback();
 
             // Create the WebSocket connection with any required protocols/headers.
-            const ws = new WebSocket(CONFIG.API.REALTIME_ENDPOINT_WS, [
-                'realtime',
-                // Authentication (example – adjust as needed)
-                "openai-insecure-api-key." + import.meta.env.VITE_OPENAI_API_KEY,
-                "openai-beta.realtime-v1"
-            ]);
-            websocketRef.current = ws;
+            const transcriptWs = new WebSocket('wss://78e3-2603-7000-8df0-77a0-48b1-c9db-28cd-1b87.ngrok-free.app/transcripts');
+            transcriptWebsocketRef.current = transcriptWs;
+
+            const audioWs = new WebSocket('wss://78e3-2603-7000-8df0-77a0-48b1-c9db-28cd-1b87.ngrok-free.app/transcripts');
+            audioWebsocketRef.current = audioWs;
 
             // Send periodic pings to keep the connection alive.
-            const pingInterval = setInterval(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'ping' }));
-                    console.log('Sent keep-alive ping.');
-                }
-            }, 5000);
+            // const pingInterval = setInterval(() => {
+            //     if (ws.readyState === WebSocket.OPEN) {
+            //         ws.send(JSON.stringify({ type: 'ping' }));
+            //         console.log('Sent keep-alive ping.');
+            //     }
+            // }, 5000);
 
-            ws.onopen = async () => {
+            transcriptWs.onopen = async () => {
                 console.log('WebSocket connection established');
                 setStatus('connected');
                 setIsListening(true);
@@ -314,10 +313,10 @@ export const useWebSocketAudio = () => {
                 // startLocalMonitoring();
                 startIdleMonitoring();
                 // Clear the ping interval when the connection closes.
-                ws.onclose = () => clearInterval(pingInterval);
+                transcriptWs.onclose = () => clearInterval(pingInterval);
             };
 
-            ws.onmessage = (event) => {
+            audioWs.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     handleServerMessage(data);
@@ -326,12 +325,12 @@ export const useWebSocketAudio = () => {
                 }
             };
 
-            ws.onerror = (error) => {
+            audioWs.onerror = (error) => {
                 console.error('WebSocket error:', error);
                 setStatus('error');
             };
 
-            ws.onclose = (event) => {
+            audioWs.onclose = (event) => {
                 console.log(`WebSocket closed: Code=${event.code}, Reason=${event.reason}`);
                 if (reconnectAttempts.current < maxReconnectAttempts) {
                     reconnectAttempts.current++;
@@ -371,9 +370,13 @@ export const useWebSocketAudio = () => {
             mediaStream.current.getTracks().forEach((track) => track.stop());
             mediaStream.current = null;
         }
-        if (websocketRef.current) {
+        if (audioWebsocketRef.current) {
             websocketRef.current.close();
             websocketRef.current = null;
+        }
+        if (transcriptWebsocketRef.current) {
+            transcriptWebsocketRef.current.close();
+            transcriptWebsocketRef.current = null;
         }
         if (audioContextRef.current) {
             audioContextRef.current.close().catch((err) =>
