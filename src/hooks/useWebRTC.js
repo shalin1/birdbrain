@@ -337,14 +337,14 @@ export const useWebRTC = () => {
 
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
-      if (idleTime >= 45000) {
-        console.log('45 seconds of inactivity. Closing connection...');
+      if (idleTime >= 120000) {
+        console.log('2 minutes of inactivity. Closing connection...');
         disconnect();
         resetIdleTimer();
         setTimeout(() => {
           console.log('Reconnecting...');
           connect();
-        }, 7000);
+        }, 30000);
       }
     }, 100); // Check every 5 seconds
   };
