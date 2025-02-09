@@ -407,6 +407,25 @@ export const useWebRTC = () => {
         console.log('Data channel open');
         setStatus('connected');
         setIsListening(true);
+        dc.send(JSON.stringify({
+          type: "session.update",
+          session: {
+            modalities: ["audio", "text"],
+            instructions: birdPrompt,
+            voice: "ballad",
+            input_audio_format: "pcm16",
+            output_audio_format: "pcm16",
+            turn_detection: {
+              type: "server_vad",
+              threshold: 0.5,
+              prefix_padding_ms: 500,
+              silence_duration_ms: 500,
+              create_response: true
+            },
+            temperature: temperature,
+            max_response_output_tokens: 4096  // use a valid integer within the accepted range
+          }
+        }));
 
         dc.send(
           JSON.stringify({
@@ -414,7 +433,7 @@ export const useWebRTC = () => {
             response: {
               modalities: ['text', 'audio'],
               instructions: birdPrompt,
-              temperature: temperature
+              temperature: temperature,
             },
           })
         );

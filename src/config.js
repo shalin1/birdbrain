@@ -23,7 +23,6 @@ export const CONFIG = {
   },
   MODEL: {
     name: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    voice: 'shimmer'
   },
   BIRD_BRAIN_PROMPT: `Name: Birdface
 

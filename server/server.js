@@ -31,7 +31,9 @@ app.get('/session', async (req, res) => {
             },
             body: JSON.stringify({
                 model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-                voice: 'shimmer',
+                voice: 'ash',
+                modalities: ['text', 'audio'],
+                instructions: 'You are a deeply unfriendly assistant.',
             }),
         });
 

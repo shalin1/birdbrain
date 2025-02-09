@@ -1,7 +1,7 @@
 // netlify/functions/session.js
 const https = require('https');
 
-exports.handler = async function(event, context) {
+exports.handler = async function (event, context) {
     try {
         const response = await new Promise((resolve, reject) => {
             const options = {
@@ -16,11 +16,11 @@ exports.handler = async function(event, context) {
 
             const req = https.request(options, (res) => {
                 let data = '';
-                
+
                 res.on('data', (chunk) => {
                     data += chunk;
                 });
-                
+
                 res.on('end', () => {
                     resolve({
                         statusCode: res.statusCode,
@@ -36,9 +36,9 @@ exports.handler = async function(event, context) {
 
             req.write(JSON.stringify({
                 model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-                voice: 'shimmer',
+                voice: 'onynx',
             }));
-            
+
             req.end();
         });
 
@@ -64,9 +64,9 @@ exports.handler = async function(event, context) {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 error: error.message,
-                stack: error.stack 
+                stack: error.stack
             })
         };
     }
