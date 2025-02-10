@@ -12,6 +12,8 @@ const VoiceChat = () => {
   // Destructure values from the WebRTC hook.
   const {
     status,
+    voice,
+    setVoice,
     isListening,
     connect,
     stream,
@@ -213,6 +215,22 @@ const VoiceChat = () => {
             </p>
           </div>
         )}
+        {/* Voice Selector */}
+        {status === 'disconnected' &&
+          <div className="space-y-2">
+            <h3 className="font-semibold text-sm text-gray-300">Voice</h3>
+            <select value={voice} onChange={(e) => setVoice(e.target.value)} className="w-full">
+              <option value="alloy">Alloy</option>
+              <option value="ash">Ash</option>
+              <option value="ballad">Ballad</option>
+              <option value="coral">Coral</option>
+              <option value="echo">Echo</option>
+              <option value="sage">Sage</option>
+              <option value="shimmer">Shimmer</option>
+              <option value="verse">Verse</option>
+            </select>
+          </div>
+        }
         {/* Temperature Slider */}
         <div className="p-4 max-w-md mx-auto">
           <label htmlFor="temperature" className="block mb-2 font-semibold">
