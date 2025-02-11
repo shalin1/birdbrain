@@ -334,7 +334,7 @@ export const useWebRTC = () => {
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
       console.log('idleTime', idleTime)
-      if (idleTime >= 3 * 20 * 1000) {
+      if (idleTime >= 3 * 60 * 1000) {
         console.log('3 minutes of inactivity. restarting conversation...');
         lastActivityTimestampRef.current = Date.now();
         disconnect()

@@ -227,7 +227,7 @@ const VoiceChat = () => {
               Morning Motivator
             </button>
             <button
-              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_LOVEBURN)}
+              onClick={() => handleUpdatePrompt(CONFIG.THE_POET)}
               className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
             >
               The poet
@@ -261,6 +261,12 @@ const VoiceChat = () => {
               className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
             >
               Quantum Beach
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_RECURSIVE_LITERARY)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Recursive Literary
             </button>
           </div>
         ) : (
