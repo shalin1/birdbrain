@@ -35,7 +35,7 @@ exports.handler = async function (event, context) {
             });
 
             req.write(JSON.stringify({
-                model: 'gpt-4o-realtime-preview-2024-12-17',
+                model: 'gpt-4o-mini-realtime-preview-2024-12-17',
                 voice: 'onyx',
             }));
 
