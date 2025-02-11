@@ -201,10 +201,52 @@ const VoiceChat = () => {
               Psychedelic
             </button>
             <button
-              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE_COP_SUSPECTION)}
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_LOVEBURN)}
               className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
             >
-              Dismissive Cop Suspicion
+              The poet
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_RAVE_SHAMAN)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Rave Shaman
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_COSTUME_INSPECTOR)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Costume Inspector
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_FOOD_SCOUT)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Food Scout
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_MORNING_MOTIVATOR)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Morning Motivator
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_LOVEBURN)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              The poet
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_DANCE_INSTRUCTOR)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Dance Instructor
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_CONSPIRACY_DJ)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Conspiracy DJ
             </button>
           </div>
         ) : (

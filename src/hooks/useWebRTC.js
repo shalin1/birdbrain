@@ -62,6 +62,7 @@ export const useWebRTC = () => {
   const [stream, setStream] = useState(null);
   const [audioContext, setAudioContext] = useState(null);
   const [birdPrompt, setBirdPrompt] = useState(CONFIG.BIRD_BRAIN_PROMPT);
+  const birdPromptRef = useRef(birdPrompt);
   const [temperature, setTemperature] = useState(0.8)
   const [voice, setVoice] = useState("ballad")
 
@@ -85,6 +86,21 @@ export const useWebRTC = () => {
   const sessionMaxLengthIntervalRef = useRef(null);
   const idleCheckIntervalRef = useRef(null);
 
+  // Define a list of prompts
+  const prompts = [
+    CONFIG.BIRD_BRAIN_PROMPT,
+    CONFIG.BIRD_BRAIN_PROMPT_DISMISSIVE,
+    CONFIG.BIRD_BRAIN_PROMPT_GAMEMASTER,
+    CONFIG.BIRD_BRAIN_PROMPT_NARC_MODE,
+    CONFIG.BIRD_BRAIN_PROMPT_EXTRA_RUDE,
+    CONFIG.BIRD_BRAIN_PROMPT_PSYCHEDELIC,
+    CONFIG.BIRD_BRAIN_PROMPT_LOVEBURN,
+    CONFIG.BIRD_BRAIN_PROMPT_RAVE_SHAMAN,
+    CONFIG.BIRD_BRAIN_PROMPT_COSTUME_INSPECTOR,
+    CONFIG.BIRD_BRAIN_PROMPT_FOOD_SCOUT,
+    CONFIG.BIRD_BRAIN_PROMPT_DANCE_INSTRUCTOR,
+    CONFIG.BIRD_BRAIN_PROMPT_CONSPIRACY_DJ,
+  ];
 
   /**
    * Initializes or retrieves the AudioContext
@@ -316,8 +332,8 @@ export const useWebRTC = () => {
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
       console.log('idleTime', idleTime)
-      if (idleTime >= 2 * 60 * 1000) {
-        console.log('2 minutes of inactivity. restarting conversation...');
+      if (idleTime >= 3 * 20 * 1000) {
+        console.log('3 minutes of inactivity. restarting conversation...');
         disconnect()
       }
     }, 500);
@@ -330,21 +346,18 @@ export const useWebRTC = () => {
    */
   const updatePromptMidSession = (newPrompt) => {
     setBirdPrompt(newPrompt);
+    birdPromptRef.current = newPrompt;
 
-    if (dataChannel.current?.readyState === 'open') {
-      dataChannel.current.send(
-        JSON.stringify({
-          event_id: `event_${Date.now()}`,
-          type: 'session.update',
-          session: {
-            instructions: newPrompt,
-            temperature: temperature,
-          },
-        })
-      );
-      console.log('Sent updated prompt mid-session');
-    }
-  };
+    dataChannel.current.send(
+      JSON.stringify({
+        event_id: `event_${Date.now()}`,
+        type: 'session.update',
+        session: {
+          instructions: newPrompt,
+        },
+      })
+    );
+  }
 
   /**
    * Establishes WebRTC connection
@@ -385,7 +398,7 @@ export const useWebRTC = () => {
           type: "session.update",
           session: {
             modalities: ["audio", "text"],
-            instructions: birdPrompt,
+            instructions: birdPromptRef.current,
             voice: voice,
             input_audio_format: "pcm16",
             output_audio_format: "pcm16",
@@ -406,7 +419,7 @@ export const useWebRTC = () => {
             type: 'response.create',
             response: {
               modalities: ['text', 'audio'],
-              instructions: birdPrompt,
+              instructions: birdPromptRef.current,
               temperature: temperature,
             },
           })
@@ -432,7 +445,7 @@ export const useWebRTC = () => {
                 event_id: `reset_${Date.now()}`,
                 type: 'session.update',
                 session: {
-                  instructions: birdPrompt,
+                  instructions: birdPromptRef.current,
                   temperature: temperature,
                 }
               })
@@ -499,7 +512,7 @@ export const useWebRTC = () => {
     // First check if data channel is available and open
     if (!dataChannel.current || dataChannel.current.readyState !== 'open') {
       console.log('Data channel not available, proceeding with cleanup');
-      cleanupConnection();
+      cleanupConnection(disconnectWithoutReconnect);
       return;
     }
 
@@ -558,12 +571,20 @@ export const useWebRTC = () => {
 
     console.log('Disconnected successfully.');
     if (!disconnectWithoutReconnect) {
+      // Select a random prompt
+      const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+
+
       setTimeout(() => {
-        console.log("Reconnecting after 5 seconds")
-        connect()
-      }, 100)
-    }
-  };
+        console.log("Reconnecting with a new prompt");
+        connect().then(() => {
+          updatePromptMidSession(randomPrompt);
+          console.log(birdPromptRef.current)
+        });
+      }, 1000);
+
+    };
+  }
 
   return {
     status,
