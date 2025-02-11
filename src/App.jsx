@@ -203,12 +203,6 @@ const VoiceChat = () => {
               Psychedelic
             </button>
             <button
-              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_LOVEBURN)}
-              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
-            >
-              The poet
-            </button>
-            <button
               onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_RAVE_SHAMAN)}
               className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
             >
@@ -249,6 +243,24 @@ const VoiceChat = () => {
               className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
             >
               Conspiracy DJ
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_TECH_RAVE_PROPHET)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Tech Rave Prophet
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_BURNING_BIRDHIVE)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Burning BirdHive
+            </button>
+            <button
+              onClick={() => handleUpdatePrompt(CONFIG.BIRD_BRAIN_PROMPT_QUANTUM_BEACH)}
+              className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Quantum Beach
             </button>
           </div>
         ) : (

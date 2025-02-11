@@ -96,7 +96,7 @@ export const useWebRTC = () => {
     CONFIG.BIRD_BRAIN_PROMPT_NARC_MODE,
     CONFIG.BIRD_BRAIN_PROMPT_EXTRA_RUDE,
     CONFIG.BIRD_BRAIN_PROMPT_PSYCHEDELIC,
-    CONFIG.BIRD_BRAIN_PROMPT_LOVEBURN,
+    CONFIG.THE_POET,
     CONFIG.BIRD_BRAIN_PROMPT_RAVE_SHAMAN,
     CONFIG.BIRD_BRAIN_PROMPT_COSTUME_INSPECTOR,
     CONFIG.BIRD_BRAIN_PROMPT_FOOD_SCOUT,
@@ -334,18 +334,14 @@ export const useWebRTC = () => {
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
       console.log('idleTime', idleTime)
-      if (idleTime >= 3 * 60 * 1000) {
+      if (idleTime >= 3 * 20 * 1000) {
         console.log('3 minutes of inactivity. restarting conversation...');
+        lastActivityTimestampRef.current = Date.now();
         disconnect()
       }
     }, 500);
-  };
+  }
 
-
-  /**
-   * Updates the AI prompt mid-session
-   * Allows dynamic personality changes
-   */
   const updatePromptMidSession = (newPrompt) => {
     setBirdPrompt(newPrompt);
     birdPromptRef.current = newPrompt;
