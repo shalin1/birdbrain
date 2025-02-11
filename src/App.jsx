@@ -128,11 +128,11 @@ const VoiceChat = () => {
             )}
             {connection === 'websocket' && (
               <button
-                onClick={wsToggleListening}
-                className={`w-full px-4 py-3 rounded-md transition-colors ${wsIsListening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+                onclick={wstogglelistening}
+                classname={`w-full px-4 py-3 rounded-md transition-colors ${wsislistening ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
                   } text-white`}
               >
-                {wsIsListening ? 'Mute Microphone' : 'Enable Microphone'}
+                {wsislistening ? 'mute microphone' : 'enable microphone'}
               </button>
             )}
           </div>
@@ -143,7 +143,7 @@ const VoiceChat = () => {
           <>
             {connection === 'webrtc' && (
               <button
-                onClick={disconnect}
+                onClick={() => disconnect(true)}
                 className="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
               >
                 Disconnect

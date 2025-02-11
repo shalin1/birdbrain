@@ -81,6 +81,8 @@ export const useWebRTC = () => {
 
   // Idle detection references
   const lastActivityTimestampRef = useRef(Date.now());
+  const sessionMaxLengthRef = useRef(Date.now());
+  const sessionMaxLengthIntervalRef = useRef(null);
   const idleCheckIntervalRef = useRef(null);
 
 
@@ -286,47 +288,22 @@ export const useWebRTC = () => {
     }
   };
 
-  /**
-   * Sends a random lonely message when idle
-   * Ensures message variety and appropriate timing
-   */
-  const sendLonelyMessage = () => {
-    if (dataChannel.current?.readyState === 'open') {
-      // First, update session configuration
-      const randomMessage = lonelyMessages[
-        Math.floor(Math.random() * lonelyMessages.length)
-      ];
-
-      dataChannel.current.send(
-        JSON.stringify({
-          event_id: `config_${Date.now()}`,
-          type: 'session.update',
-          session: {
-            instructions: `You must respond exactly with ${randomMessage} without variation.`,
-            modalities: ['audio', 'text'],
-            temperature: 0.6,
-          }
-        })
-      );
-
-      // Then, after a brief delay to ensure config is applied, send the response request
-      setTimeout(() => {
-        dataChannel.current.send(
-          JSON.stringify({
-            event_id: `lonely_${Date.now()}`,
-            type: 'response.create',
-            response: {
-              modalities: ['audio', 'text']
-            }
-          })
-        );
-      }, 1000);
-    }
-  };
 
   const resetIdleTimer = () => {
     lastActivityTimestampRef.current = Date.now();
   }
+
+  const startSessionMaxLengthMonitoring = () => {
+    sessionMaxLengthRef.current = Date.now();
+    sessionMaxLengthIntervalRef.current = setInterval(() => {
+      const idleTime = Date.now() - sessionMaxLengthRef.current;
+      if (idleTime >= 15 * 60 * 1000) {
+        console.log('15 minutes since session started. Closing connection...');
+        disconnect();
+      }
+    }, 100);
+  }
+
   /**
    * Starts the idle monitoring system
    * Checks for inactivity every 45 seconds
@@ -338,16 +315,12 @@ export const useWebRTC = () => {
 
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
-      if (idleTime >= 120000) {
-        console.log('2 minutes of inactivity. Closing connection...');
-        disconnect();
-        resetIdleTimer();
-        setTimeout(() => {
-          console.log('Reconnecting...');
-          connect();
-        }, 30000);
+      console.log('idleTime', idleTime)
+      if (idleTime >= 2 * 60 * 1000) {
+        console.log('2 minutes of inactivity. restarting conversation...');
+        disconnect()
       }
-    }, 100); // Check every 5 seconds
+    }, 500);
   };
 
 
@@ -439,7 +412,9 @@ export const useWebRTC = () => {
           })
         );
 
-        startIdleMonitoring();
+        // startIdleMonitoring();
+        startSessionMaxLengthMonitoring();
+        startIdleMonitoring()
         setupLocalVolumeMonitoring();
       };
 
@@ -520,41 +495,7 @@ export const useWebRTC = () => {
     }
   };
 
-  /**
-   * Cleanup handler
-   * Ensures proper resource disposal
-   */
-  useEffect(() => {
-    return () => {
-      // Clear timers
-      if (idleCheckIntervalRef.current) {
-        clearInterval(idleCheckIntervalRef.current);
-      }
-
-      // Stop animation frame
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-
-      // Stop media streams
-      mediaStream.current?.getTracks().forEach(t => t.stop());
-
-      // Close peer connection
-      if (peerConnection.current) {
-        peerConnection.current.close();
-        peerConnection.current = null;
-      }
-
-      // Close audio context
-      if (audioContext) {
-        audioContext.close().catch((err) => console.error('Error closing audio context:', err));
-      }
-      setAudioContext(null);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const disconnect = () => {
+  const disconnect = (disconnectWithoutReconnect = false) => {
     // First check if data channel is available and open
     if (!dataChannel.current || dataChannel.current.readyState !== 'open') {
       console.log('Data channel not available, proceeding with cleanup');
@@ -562,59 +503,21 @@ export const useWebRTC = () => {
       return;
     }
 
-    // Set up message handler before sending goodbye
-    dataChannel.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('Disconnect flow received message:', data);
-
-        if (data.type === 'output_audio_buffer.audio_stopped') {
-          console.log('Server acknowledged goodbye, cleaning up connection');
-          cleanupConnection();
-        }
-      } catch (err) {
-        console.error('Error handling disconnect message:', err);
-        cleanupConnection();
-      }
-    };
-
-    // Send goodbye message
-    console.log('Sending goodbye message');
-    try {
-      dataChannel.current.send(
-        JSON.stringify({
-          event_id: `goodbye_${Date.now()}`,
-          type: 'session.update',
-          session: {
-            instructions: 'say exactly "Well this has been just great. Wow. Goodbye, farewell, I wish you the best, adios!", but also include a fun callback to the earlier conversation',
-            temperature: temperature,
-          }
-        })
-      );
-
-      // Force a response 
-      dataChannel.current.send(
-        JSON.stringify({
-          event_id: `goodbye_response_${Date.now()}`,
-          type: 'response.create',
-          response: {
-            modalities: ['text', 'audio'],
-          }
-        })
-      );
-    } catch (err) {
-      console.error('Error sending goodbye message:', err);
-      cleanupConnection();
-    }
+    cleanupConnection(disconnectWithoutReconnect);
   };
 
   // Move cleanup logic to separate function
-  const cleanupConnection = () => {
+  const cleanupConnection = (disconnectWithoutReconnect = false) => {
     // Clear intervals/timeouts
     resetIdleTimer();
     if (idleCheckIntervalRef.current) {
       clearInterval(idleCheckIntervalRef.current);
       idleCheckIntervalRef.current = null;
+    }
+
+    if (sessionMaxLengthIntervalRef.current) {
+      clearInterval(sessionMaxLengthIntervalRef.current);
+      sessionMaxLengthIntervalRef.current = null;
     }
 
     // Stop animation frame
@@ -654,6 +557,12 @@ export const useWebRTC = () => {
     setIsListening(false);
 
     console.log('Disconnected successfully.');
+    if (!disconnectWithoutReconnect) {
+      setTimeout(() => {
+        console.log("Reconnecting after 5 seconds")
+        connect()
+      }, 100)
+    }
   };
 
   return {
