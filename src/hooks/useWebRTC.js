@@ -65,6 +65,8 @@ export const useWebRTC = () => {
   const birdPromptRef = useRef(birdPrompt);
   const [temperature, setTemperature] = useState(0.8)
   const [voice, setVoice] = useState("ballad")
+  const [shufflePrompts, setShufflePrompts] = useState(true)
+  const shufflePromptsRef = useRef(shufflePrompts);
 
   // Core WebRTC refs - persist across renders but don't trigger updates
   const peerConnection = useRef(null);
@@ -332,7 +334,7 @@ export const useWebRTC = () => {
     idleCheckIntervalRef.current = setInterval(() => {
       const idleTime = Date.now() - lastActivityTimestampRef.current;
       console.log('idleTime', idleTime)
-      if (idleTime >= 3 * 20 * 1000) {
+      if (idleTime >= 3 * 60 * 1000) {
         console.log('3 minutes of inactivity. restarting conversation...');
         disconnect()
       }
@@ -578,12 +580,17 @@ export const useWebRTC = () => {
       setTimeout(() => {
         console.log("Reconnecting with a new prompt");
         connect().then(() => {
-          updatePromptMidSession(randomPrompt);
+          if (shufflePromptsRef.current) { updatePromptMidSession(randomPrompt) }
           console.log(birdPromptRef.current)
         });
       }, 1000);
 
     };
+  }
+
+  const updateShufflePrompts = (newShufflePrompts) => {
+    setShufflePrompts(newShufflePrompts);
+    shufflePromptsRef.current = newShufflePrompts
   }
 
   return {
@@ -599,6 +606,8 @@ export const useWebRTC = () => {
     birdPrompt,
     temperature,
     setTemperature,
-    setVoice
+    setVoice,
+    shufflePrompts,
+    updateShufflePrompts
   };
 };

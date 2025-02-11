@@ -23,7 +23,9 @@ const VoiceChat = () => {
     audioContext,
     disconnect,
     temperature,
-    setTemperature
+    setTemperature,
+    shufflePrompts,
+    updateShufflePrompts
   } = useWebRTC();
 
   // Destructure values from the WebSocket hook.
@@ -100,12 +102,12 @@ const VoiceChat = () => {
             >
               Connect to OpenAI Realtime via WebRTC
             </button>
-            <button
+            {/* <button
               onClick={connectToOpenAiRealtimeWebsocket}
               className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600 transition-colors"
             >
               Connect to OpenAI Realtime via WebSocket
-            </button>
+            </button> */}
           </>
         )}
 
@@ -273,6 +275,13 @@ const VoiceChat = () => {
             </select>
           </div>
         }
+        {/* Shuffle Prompts */}
+        <div className="space-y-2">
+          <h3 className="font-semibold text-sm text-gray-300">Shuffle Prompts</h3>
+          <button onClick={() => updateShufflePrompts(!shufflePrompts)} className="w-full bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors">
+            {shufflePrompts ? 'Disable Shuffle on reconnect' : 'Enable Shuffle on reconnect'}
+          </button>
+        </div>
         {/* Temperature Slider */}
         <div className="p-4 max-w-md mx-auto">
           <label htmlFor="temperature" className="block mb-2 font-semibold">
